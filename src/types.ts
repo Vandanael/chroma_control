@@ -107,6 +107,25 @@ export interface Nexus {
 }
 
 // =============================================================================
+// LIENS (Sprint 4+)
+// =============================================================================
+
+export interface NexusLink {
+  id: string;
+  fromId: string;
+  toId: string;
+  owner: NexusOwner;
+  /**
+   * Timestamp de création (ms, via performance.now()) pour l’animation “plotter”.
+   */
+  createdAt: number;
+  /**
+   * Durée de l’animation de tracé (ms).
+   */
+  animationDuration: number;
+}
+
+// =============================================================================
 // COLOR PALETTE - Pastel NASA-Punk
 // =============================================================================
 

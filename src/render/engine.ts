@@ -3,11 +3,11 @@
  * Handles the main render loop, FPS tracking, and debug display
  */
 
-import { CanvasContext, DebugState, TouchState, UnitType, COLORS, Nexus } from '../types';
+import { CanvasContext, DebugState, TouchState, UnitType, COLORS, Nexus, NexusLink } from '../types';
 import { clearCanvas, drawGrid } from './canvas';
 import { drawUnitIndicator, drawProgressArc, drawCoordinates, drawCoordinatesWithLabel, getUnitColor, easeOutCubic } from './effects';
 import { updateTouchState, getInputLatency, getUnitProgress } from '../input/touch';
-import { addNexusPoints, getGameState, getScore } from '../game/state';
+import { addNexusPoints, getEnergy, getGameState, getScore, regenEnergy, spendEnergy } from '../game/state';
 
 // =============================================================================
 // STATE
@@ -62,6 +62,15 @@ const enemyAgent: EnemyAgent = {
   cooldown: 2,
   cooldownTimer: 1,
 };
+
+// Liens (Sprint 4)
+const LINK_ANIMATION_DURATION_MS = 400;
+const LINK_ENERGY_COST = 10;
+const LINK_SCORE_PER_SECOND = 2;
+const MAX_LINKS_PER_NEXUS = 3;
+
+let links: NexusLink[] = [];
+let selectedNexusId: string | null = null;
 
 // =============================================================================
 // DEBUG OVERLAY UPDATE
@@ -175,6 +184,39 @@ function renderReleasedAnimations(
   }
 }
 
+function renderLinks(
+  ctx: CanvasRenderingContext2D,
+  timestamp: number,
+): void {
+  ctx.save();
+  ctx.strokeStyle = COLORS.ink;
+  ctx.lineWidth = 2;
+
+  for (const link of links) {
+    const from = nexusList.find((n) => n.id === link.fromId);
+    const to = nexusList.find((n) => n.id === link.toId);
+    if (!from || !to) continue;
+
+    const elapsed = timestamp - link.createdAt;
+    const t = Math.min(1, elapsed / link.animationDuration);
+
+    const x1 = from.x;
+    const y1 = from.y;
+    const x2 = to.x;
+    const y2 = to.y;
+
+    const xm = x1 + (x2 - x1) * t;
+    const ym = y1 + (y2 - y1) * t;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(xm, ym);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 // =============================================================================
 // MAIN RENDER LOOP
 // =============================================================================
@@ -219,6 +261,78 @@ function ensureNexusLayout(width: number, height: number): void {
       }
       nexus.radius = NEXUS_RADIUS;
     }
+  }
+}
+
+function findNearestNexus(x: number, y: number, maxDistance: number): Nexus | null {
+  let best: Nexus | null = null;
+  let bestDist = maxDistance;
+  for (const nexus of nexusList) {
+    const d = Math.hypot(nexus.x - x, nexus.y - y);
+    if (d < bestDist) {
+      best = nexus;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+function canAddLinkBetween(a: Nexus, b: Nexus): boolean {
+  if (a.id === b.id) return false;
+  if (a.owner !== 'player' || b.owner !== 'player') return false;
+
+  // Vérifier si le lien existe déjà
+  const exists = links.some(
+    (l) =>
+      (l.fromId === a.id && l.toId === b.id) ||
+      (l.fromId === b.id && l.toId === a.id),
+  );
+  if (exists) return false;
+
+  // Max 3 liens par nexus
+  const countLinksFor = (id: string) =>
+    links.filter((l) => l.fromId === id || l.toId === id).length;
+  if (countLinksFor(a.id) >= MAX_LINKS_PER_NEXUS) return false;
+  if (countLinksFor(b.id) >= MAX_LINKS_PER_NEXUS) return false;
+
+  return true;
+}
+
+function tryCreateLinkFromTap(touchState: TouchState, gameState: string): void {
+  if (gameState !== 'PLAYING') return;
+
+  // On ne crée des liens que sur des taps rapides (scout)
+  if (touchState.detectedUnit !== 'scout') return;
+
+  const nearest = findNearestNexus(touchState.x, touchState.y, 60);
+  if (!nearest || nearest.owner !== 'player') return;
+
+  if (!selectedNexusId) {
+    // Premier nexus sélectionné
+    selectedNexusId = nearest.id;
+  } else {
+    const first = nexusList.find((n) => n.id === selectedNexusId);
+    const second = nearest;
+    selectedNexusId = null;
+    if (!first) return;
+
+    if (!canAddLinkBetween(first, second)) return;
+
+    // Coût en énergie
+    if (!spendEnergy(LINK_ENERGY_COST)) {
+      // Pas assez d'énergie → pas de lien
+      return;
+    }
+
+    const id = `${first.id}-${second.id}-${Date.now()}`;
+    links.push({
+      id,
+      fromId: first.id,
+      toId: second.id,
+      owner: 'player',
+      createdAt: performance.now(),
+      animationDuration: LINK_ANIMATION_DURATION_MS,
+    });
   }
 }
 
@@ -360,6 +474,11 @@ function render(timestamp: number): void {
   debugState.detectedUnit = touchState.detectedUnit;
   debugState.state = touchState.active ? 'PRESSING' : 'IDLE';
 
+  // Création de liens sur tap (Sprint 4)
+  if (!touchState.active) {
+    tryCreateLinkFromTap(touchState, gameState);
+  }
+
   // Clear and draw background
   clearCanvas(ctx, width, height);
 
@@ -424,6 +543,21 @@ function render(timestamp: number): void {
   // Score = +1 point/seconde par nexus possédé
   if (gameState === 'PLAYING' && deltaSeconds > 0 && ownedCount > 0) {
     addNexusPoints(deltaSeconds * ownedCount);
+  }
+
+  // Liens (Sprint 4)
+  renderLinks(ctx, timestamp);
+
+  // Énergie (Sprint 4)
+  if (gameState === 'PLAYING' && deltaSeconds > 0) {
+    regenEnergy(deltaSeconds);
+  }
+
+  const energyHud = document.getElementById('energy-hud');
+  if (energyHud) {
+    const energy = getEnergy();
+    energyHud.textContent = `⚡ ${String(Math.floor(energy.current))
+      .padStart(3, '0')} / ${energy.max}`;
   }
 
   // Draw released animations
