@@ -1,29 +1,34 @@
 /**
- * Render Engine - Game Loop & Debug Overlay
- * MACRO GRID System - 25x16 Tactical Grid
+ * Render Engine - Bio-Digital "Free-Form" Edition
+ * Game Loop pour système de placement libre
  */
 
-import { CanvasContext, DebugState, TouchState, COLORS } from '../types';
-import { clearCanvas, applyGrain } from './canvas';
+import { CanvasContext, DebugState, TouchState } from '../types';
+import { clearCanvas } from './canvas';
 import { updateTouchState, getInputLatency } from '../input/touch';
-import { initGrid, getCells, getCellAtPosition, getCellsByOwner } from '../game/gridManager';
-import { renderGrid } from './gridRenderer';
-import { updateDeployments } from '../game/outpostDeployment';
-import { renderDeployments } from './deploymentRenderer';
+import { initNodeSystem, getAllNodes, getNodesByOwner } from '../game/nodeManager';
+import { renderWorld } from './worldRenderer';
+import { renderWorldOptimized } from './optimizedWorldRenderer';
+import { markAllDirty } from './dirtyRectangles';
+import { updateScreenShake } from './screenShake';
+import { updateAmbientSaturation } from '../audio/audioManager';
+import { calculateSaturation } from '../game/saturationSystem';
 import { 
   regenEnergy, 
-  getEnergy, 
   updateTimer, 
   getTimer, 
   updateTerritoryScore, 
   checkVictoryConditions,
-  getScore,
   getGameState
 } from '../game/state';
-import { updateDeepClick, getDeepClickProgress } from '../input/gridInput';
 import { renderLowPowerFeedback } from './lowPowerFeedback';
-import { updateAI } from '../game/ai';
-import { updateTerritoryIntegrity } from '../game/territoryIntegrity';
+import { updateAI, updateAICanvasDimensions } from '../game/ai';
+import { updateSurvivalSystem } from '../game/survivalSystem';
+import { updateSyringeAnimations, renderSyringes } from './syringeRenderer';
+import { getPredictiveLineInfo } from '../input/unifiedInput';
+import { initUIRenderer, updateHUD, updateTimerDisplay } from './uiRenderer';
+import { getPlayerColorValue } from '../game/playerColor';
+import { updateOrbitViewAvailability } from '../ui/orbitView';
 
 // =============================================================================
 // STATE
@@ -65,42 +70,28 @@ function updateDebugOverlay(touchState: TouchState): void {
   // FPS
   const fpsEl = document.getElementById('debug-fps');
   if (fpsEl) {
-    fpsEl.textContent = debugState.fps.toFixed(1);
-    fpsEl.style.color = debugState.fps >= 55 ? '#4A6B8A' : '#C98B7B';
+    fpsEl.textContent = debugState.fps.toFixed(0);
   }
 
-  // Press Time
+  // Press Time (HOLD)
   const pressTimeEl = document.getElementById('debug-press-time');
   if (pressTimeEl) {
-    pressTimeEl.textContent = `${Math.floor(touchState.duration)} ms`;
+    pressTimeEl.textContent = Math.floor(touchState.duration).toString();
   }
 
-  // Detected Unit
-  const unitEl = document.getElementById('debug-unit');
-  if (unitEl) {
-    const unitName = touchState.detectedUnit.toUpperCase();
-    unitEl.textContent = unitName === 'NONE' ? '--' : unitName;
-    unitEl.className = `value unit-${touchState.detectedUnit}`;
-  }
-
-  // Input Latency
+  // Input Latency (IN)
   const latencyEl = document.getElementById('debug-latency');
   if (latencyEl) {
-    latencyEl.textContent = `${debugState.inputLatency.toFixed(1)} ms`;
-    latencyEl.style.color = debugState.inputLatency < 16 ? '#4A6B8A' : '#C98B7B';
-  }
-
-  // State
-  const stateEl = document.getElementById('debug-state');
-  if (stateEl) {
-    stateEl.textContent = debugState.state;
-    stateEl.style.color = debugState.state === 'PRESSING' ? '#C98B7B' : '#4A6B8A';
+    latencyEl.textContent = debugState.inputLatency.toFixed(1);
   }
 }
 
 // =============================================================================
 // MAIN RENDER LOOP
 // =============================================================================
+
+// Import lazy pour éviter circular dependency
+let updateSelectorEnergyStateFn: (() => void) | null = null;
 
 function render(timestamp: number): void {
   if (!canvasContext) return;
@@ -118,218 +109,457 @@ function render(timestamp: number): void {
   const gameState = getGameState();
   const isPlaying = gameState === 'PLAYING';
 
+  // Arrêter la boucle si on est en START ou GAME_OVER
+  if (gameState === 'START' || gameState === 'GAME_OVER') {
+    // Continuer le rendu mais ne pas mettre à jour la logique
+    clearCanvas(ctx, width, height);
+    const nodes = getAllNodes();
+    if (nodes.length === 0) {
+      initNodeSystem(width, height);
+    }
+    renderWorld(ctx);
+    animationFrameId = requestAnimationFrame(render);
+    return;
+  }
+
   if (isPlaying && deltaSeconds > 0 && deltaSeconds < 0.1) {
-    // Regenerate energy (Bloc 4.1)
+    // Regenerate energy
     regenEnergy(deltaSeconds);
 
-    // Update timer (Bloc 5.3)
+    // Update FLUX system
+    import('../game/fluxSystem').then(({ regenFlux }) => {
+      const nodeCount = getAllNodes().filter(n => n.owner === 'player').length;
+      regenFlux(deltaSeconds, nodeCount);
+    });
+    
+    // Update FLUX UI
+    import('../ui/fluxUI').then(({ updateFluxUI }) => {
+      updateFluxUI();
+    });
+
+    // Update signal injection cleanup
+    import('../game/signalInjection').then(({ cleanupInjections }) => {
+      cleanupInjections(performance.now());
+    });
+
+    // Update territory grind system
+    import('../game/territoryGrind').then(({ updateTerritoryGrind }) => {
+      updateTerritoryGrind(deltaSeconds, width, height);
+    });
+
+    // Update territory dissolution particles
+    import('../render/territoryDissolution').then(({ updateTerritoryDissolution }) => {
+      updateTerritoryDissolution(deltaSeconds);
+    });
+
+    // Update double-tap burst waves
+    import('../game/doubleTapBurst').then(({ updateBurstWaves }) => {
+      updateBurstWaves(deltaSeconds);
+    });
+
+    // Update border sparkles
+    import('../render/borderSparkles').then(({ updateBorderSparkles }) => {
+      updateBorderSparkles(deltaSeconds);
+    });
+
+    // Update border tension audio
+    import('../game/borderPressure').then(({ calculateActiveBorderLength, calculateAveragePressure }) => {
+      import('../game/borderPressure').then(({ calculateBorderSegments }) => {
+        const borderLength = calculateActiveBorderLength();
+        const averagePressure = calculateAveragePressure();
+        const segments = calculateBorderSegments();
+        const averageForceRatio = segments.length > 0
+          ? segments.reduce((sum, seg) => sum + seg.forceRatio, 0) / segments.length
+          : 0;
+        
+        import('../audio/audioManager').then(({ updateBorderTensionAudio }) => {
+          if (borderLength > 0 && averagePressure > 0.1) {
+            updateBorderTensionAudio(borderLength, averagePressure, averageForceRatio);
+          } else {
+            import('../audio/audioManager').then(({ stopBorderTensionAudio }) => {
+              stopBorderTensionAudio();
+            });
+          }
+        });
+      });
+    });
+
+    // Update Double-Tap tutorial
+    import('../ui/doubleTapTutorial').then(({ updateDoubleTapTutorial }) => {
+      updateDoubleTapTutorial();
+    });
+
+    // Update timer
     updateTimer(timestamp);
 
-    // Update territory integrity (Bloc 2.4)
-    updateTerritoryIntegrity(deltaSeconds);
+    // Update survival system (Le Cordon)
+    updateSurvivalSystem(deltaSeconds);
 
-    // Update territory score (Bloc 5.4)
-    const playerCells = getCellsByOwner('player');
-    const enemyCells = getCellsByOwner('enemy');
-    updateTerritoryScore(playerCells.length, enemyCells.length, deltaSeconds);
+    // Update territory score (basé sur % territoire réel, pas nombre de nœuds)
+    updateTerritoryScore(width, height, deltaSeconds);
 
-    // Check victory conditions (Bloc 5.3)
-    checkVictoryConditions();
+    // Check victory conditions (avec dimensions canvas pour saturation)
+    checkVictoryConditions(width, height);
   }
 
   // Update touch state
   const touchState = updateTouchState();
 
+  // PROTOTYPE : Debug state désactivé pour version Review
   // Update debug state
-  debugState.inputLatency = getInputLatency();
-  debugState.pressTime = touchState.duration;
-  debugState.detectedUnit = touchState.detectedUnit;
-  debugState.state = touchState.active ? 'PRESSING' : 'IDLE';
+  // debugState.inputLatency = getInputLatency();
+  // debugState.pressTime = touchState.duration;
+  // debugState.detectedUnit = touchState.detectedUnit;
+  // debugState.state = touchState.active ? 'PRESSING' : 'IDLE';
 
-  // Clear canvas with paper background
+  // Mettre à jour le screen shake
+  const shake = updateScreenShake();
+  
+  // Clear canvas with Deep Space background
   clearCanvas(ctx, width, height);
 
-  // Apply paper grain texture (Bloc 0.2)
-  applyGrain(ctx, width, height, 0.03);
-
-  // Initialize 25x16 grid if needed
-  const cells = getCells();
-  if (cells.length === 0) {
-    initGrid(width, height);
+  // Appliquer le shake au contexte
+  if (shake.x !== 0 || shake.y !== 0) {
+    ctx.save();
+    ctx.translate(shake.x, shake.y);
   }
 
-  // Update deployments (Bloc 2.2)
-  updateDeployments();
+  // Initialize node system if needed
+  const nodes = getAllNodes();
+  if (nodes.length === 0) {
+    initNodeSystem(width, height);
+    markAllDirty(width, height); // Full redraw après init
+  } else {
+    // Marquer régions sales pour nœuds qui bougent (future optimisation)
+    // Pour l'instant, on fait un full redraw chaque frame
+    markAllDirty(width, height);
+  }
 
-  // Update AI (Bloc 5.2)
+  // Update syringe animations
+  updateSyringeAnimations();
+
+  // Update AI (avec dimensions pour calcul saturation)
   if (isPlaying) {
+    updateAICanvasDimensions(width, height);
     updateAI();
   }
 
-  // Update deep click state (Bloc 4.2)
-  const deepClickState = updateDeepClick();
-
-  // Render tactical grid (400 cells)
-  renderGrid(ctx);
-
-  // Render active deployments (Bloc 2.2)
-  renderDeployments(ctx);
-
-  // Render HUDs
-  renderEnergyHUD(ctx, width, height);      // Bloc 4.1
-  renderTimerHUD(ctx, width, height);       // Bloc 5.3
-  renderScoreHUD(ctx, width, height);       // Bloc 5.4
-
-  // Render deep click indicator (Bloc 4.2)
-  if (deepClickState.active) {
-    renderDeepClickIndicator(ctx, deepClickState);
+  // Render world (version optimisée avec batching)
+  renderWorldOptimized(ctx, width, height);
+  
+  // Render ephemeral connections (feedback éphémère 500ms)
+  if (isPlaying) {
+    import('../render/ephemeralConnections').then(({ renderEphemeralConnections }) => {
+      renderEphemeralConnections(ctx);
+    });
+  }
+  
+  // Render territory overlay (BLOC 5.2)
+  if (isPlaying) {
+    import('../render/territoryRenderer').then(({ renderTerritoryOverlay }) => {
+      renderTerritoryOverlay(ctx, width, height);
+    });
   }
 
-  // Render LOW POWER feedback (Bloc 4.4)
+  // Render syringe animations
+  renderSyringes(ctx);
+  
+  // Render disruption pulse effects (BLOC 3.6)
+  import('../render/disruptionPulseEffect').then(({ renderDisruptionPulses }) => {
+    renderDisruptionPulses(ctx);
+  });
+  
+  // SPRINT 1 : Render particles (Triple Impact)
+  import('../render/particles').then(({ renderParticles, updateParticles }) => {
+    if (isPlaying && deltaSeconds > 0 && deltaSeconds < 0.1) {
+      updateParticles(deltaSeconds);
+    }
+    renderParticles(ctx);
+  });
+  
+  // Render contested borders (BLOC 5.3)
+  if (isPlaying) {
+    import('../render/territoryRenderer').then(({ renderContestedBorders }) => {
+      renderContestedBorders(ctx, width, height);
+    });
+  }
+
+  // Render border sparkles (particules de scintillement sur frontières)
+  if (isPlaying) {
+    import('../render/borderSparkles').then(({ renderBorderSparkles }) => {
+      renderBorderSparkles(ctx);
+    });
+  }
+
+  // Render territory dissolution (particules de grignotage)
+  if (isPlaying) {
+    import('../render/territoryDissolution').then(({ renderTerritoryDissolution }) => {
+      renderTerritoryDissolution(ctx);
+    });
+  }
+
+  // Render burst waves (ondes de choc du double-tap)
+  if (isPlaying) {
+    import('../game/doubleTapBurst').then(({ getActiveBursts }) => {
+      const bursts = getActiveBursts();
+      if (bursts.length > 0) {
+        renderBurstWaves(ctx, bursts);
+      }
+    });
+  }
+
+  // Render predictive line (ligne prédictive au survol)
+  renderPredictiveLine(ctx);
+  
+  // PROTOTYPE : Afficher coût discret à côté du curseur
+  if (isPlaying) {
+    renderCostIndicator(ctx);
+  }
+  
+  // Render signal range visualization (BLOC 1.6)
+  if (isPlaying) {
+    import('../render/signalRangeVisualizer').then(({ renderSignalRange }) => {
+      renderSignalRange(ctx);
+    });
+  }
+  
+  // SPRINT 1 : Render Drop-Pod waves (onde de guidage)
+  if (isPlaying) {
+    import('../render/dropPodWave').then(({ renderDropPodWaves }) => {
+      renderDropPodWaves(ctx);
+    });
+  }
+  
+  // SPRINT 1 : Render Drop-Pod waves (onde de guidage)
+  if (isPlaying) {
+    import('../render/dropPodWave').then(({ renderDropPodWaves }) => {
+      renderDropPodWaves(ctx);
+    });
+  }
+
+  // Update HUD (DOM-based Cockpit)
+  const timer = getTimer();
+  updateTimerDisplay(timer.minutes, timer.seconds);
+  updateHUD();
+  
+  // PROTOTYPE : Node Type Selector désactivé
+  // Update Node Type Selector energy state (BLOC 1.4)
+  // if (isPlaying) {
+  //   if (!updateSelectorEnergyStateFn) {
+  //     import('../ui/nodeTypeSelector').then(({ updateSelectorEnergyState }) => {
+  //       updateSelectorEnergyStateFn = updateSelectorEnergyState;
+  //     });
+  //   }
+  //   if (updateSelectorEnergyStateFn) {
+  //     updateSelectorEnergyStateFn();
+  //   }
+  // }
+  
+  // Update Orbit View availability (70% saturation)
+  if (isPlaying) {
+    updateOrbitViewAvailability(width, height);
+    
+    // Mettre à jour l'ambiance sonore selon la saturation
+    const playerSaturation = calculateSaturation('player', width, height);
+    updateAmbientSaturation(playerSaturation);
+    
+    // Vérifier transitions de phase (BLOC 6.3)
+    import('../ui/phaseTransition').then(({ checkPhaseTransitions }) => {
+      checkPhaseTransitions();
+    });
+  }
+
+  // Render LOW POWER feedback
   renderLowPowerFeedback(ctx, width, height);
 
-  // Update debug overlay
-  updateDebugOverlay(touchState);
+  // PROTOTYPE : Debug overlay désactivé pour version Review
+  // updateDebugOverlay(touchState);
 
   // Continue loop
   animationFrameId = requestAnimationFrame(render);
 }
 
 // =============================================================================
-// ENERGY HUD (Bloc 4.1)
+// PREDICTIVE LINE RENDERING
 // =============================================================================
 
-function renderEnergyHUD(ctx: CanvasRenderingContext2D, _width: number, height: number): void {
-  const energy = getEnergy();
-  const percentage = (energy.current / energy.max) * 100;
+// Import lazy pour éviter circular dependency
+let calculateSignalRangeFn: ((owner: 'player' | 'enemy') => number) | null = null;
 
-  // Position en bas à gauche
-  const x = 20;
-  const y = height - 30;
+/**
+ * Rend la ligne prédictive au survol
+ * SPRINT 1 : Ligne qui s'étire jusqu'à la limite max quand hors portée
+ */
+function renderPredictiveLine(ctx: CanvasRenderingContext2D): void {
+  const lineInfo = getPredictiveLineInfo();
+  if (!lineInfo) return;
 
-  // Texte
+  // Charger la fonction de calcul de portée
+  if (!calculateSignalRangeFn) {
+    import('../game/signalPhysics').then(({ calculateSignalRange }) => {
+      calculateSignalRangeFn = calculateSignalRange;
+    });
+  }
+
   ctx.save();
-  ctx.font = '16px "IBM Plex Mono", monospace';
-  ctx.fillStyle = '#4A6B8A'; // Bleu technique
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
   
-  const energyText = `⚡ ${Math.floor(energy.current)} / ${energy.max}`;
-  ctx.fillText(energyText, x, y);
-
-  // Barre d'énergie
-  const barWidth = 150;
-  const barHeight = 8;
-  const barX = x + 120;
-  const barY = y - barHeight / 2;
-
-  // Fond de la barre
-  ctx.fillStyle = '#D5D0C8';
-  ctx.fillRect(barX, barY, barWidth, barHeight);
-
-  // Remplissage de la barre
-  const fillWidth = (barWidth * percentage) / 100;
-  ctx.fillStyle = energy.current < 20 ? '#C98B7B' : '#7BA3C9'; // Rouge si < 20, bleu sinon
-  ctx.fillRect(barX, barY, fillWidth, barHeight);
-
-  // Bordure
-  ctx.strokeStyle = '#5C4A3D';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-  ctx.restore();
-}
-
-// =============================================================================
-// DEEP CLICK INDICATOR (Bloc 4.2)
-// =============================================================================
-
-function renderDeepClickIndicator(ctx: CanvasRenderingContext2D, deepClickState: any): void {
-  const cell = getCellAtPosition(deepClickState.startX, deepClickState.startY);
-  if (!cell) return;
-
-  const progress = getDeepClickProgress();
-  const centerX = cell.x + cell.size / 2;
-  const centerY = cell.y + cell.size / 2;
-  const radius = cell.size / 2 - 4;
-
-  ctx.save();
-
-  // Cercle de fond
-  ctx.strokeStyle = COLORS.grid;
-  ctx.lineWidth = 3;
-  ctx.globalAlpha = 0.3;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Arc de progression
-  ctx.strokeStyle = progress >= 1 ? COLORS.player : COLORS.annotation;
-  ctx.lineWidth = 3;
-  ctx.globalAlpha = 0.8;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-  ctx.stroke();
-
-  // Texte central
-  if (progress < 1) {
-    ctx.fillStyle = COLORS.annotation;
-    ctx.font = '10px "IBM Plex Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.globalAlpha = 1;
-    ctx.fillText('HOLD', centerX, centerY);
+  // Utiliser l'offset de placement sur mobile
+  const endX = lineInfo.placementOffset ? lineInfo.endX + lineInfo.placementOffset.x : lineInfo.endX;
+  const endY = lineInfo.placementOffset ? lineInfo.endY + lineInfo.placementOffset.y : lineInfo.endY;
+  
+  // SPRINT 1 : Calculer la limite max de portée
+  let actualEndX = endX;
+  let actualEndY = endY;
+  const isOutOfRange = !lineInfo.valid;
+  
+  if (isOutOfRange && calculateSignalRangeFn) {
+    // Calculer la distance depuis le nœud de départ
+    const dx = endX - lineInfo.startX;
+    const dy = endY - lineInfo.startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Récupérer la portée maximale du signal
+    const maxRange = calculateSignalRangeFn('player');
+    
+    // Calculer la position à la limite max
+    if (distance > maxRange) {
+      const angle = Math.atan2(dy, dx);
+      actualEndX = lineInfo.startX + Math.cos(angle) * maxRange;
+      actualEndY = lineInfo.startY + Math.sin(angle) * maxRange;
+    }
+    
+    // SPRINT 1 : Ligne rouge pulsante qui s'affine (effet élastique)
+    const now = performance.now();
+    const pulseSpeed = 0.008; // Vitesse de pulsation
+    const pulse = Math.sin(now * pulseSpeed) * 0.3 + 0.7; // 0.4 à 1.0
+    
+    ctx.strokeStyle = '#FF0055';
+    ctx.globalAlpha = pulse * 0.8; // Pulsation d'opacité
+    ctx.lineWidth = Math.max(1, 3 * (1 - pulse * 0.5)); // S'affine avec la pulsation (effet élastique)
+    ctx.setLineDash([6, 3]); // Pointillés plus espacés
+    
+    // Dessiner la ligne jusqu'à la limite
+    ctx.beginPath();
+    ctx.moveTo(lineInfo.startX, lineInfo.startY);
+    ctx.lineTo(actualEndX, actualEndY);
+    ctx.stroke();
+    
+    // Indicateur "MAX RANGE" à la fin de la ligne
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#FF0055';
+    ctx.beginPath();
+    ctx.arc(actualEndX, actualEndY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Cercle de limite
+    ctx.strokeStyle = '#FF0055';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = pulse * 0.3;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    const maxRangeVisual = Math.sqrt((actualEndX - lineInfo.startX) ** 2 + (actualEndY - lineInfo.startY) ** 2);
+    ctx.arc(lineInfo.startX, lineInfo.startY, maxRangeVisual, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    // Ligne normale si dans la portée
+    ctx.strokeStyle = getPlayerColorValue();
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    
+    ctx.beginPath();
+    ctx.moveTo(lineInfo.startX, lineInfo.startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    
+    // Indicateur visuel de placement sur mobile
+    if (lineInfo.placementOffset) {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = getPlayerColorValue();
+      ctx.beginPath();
+      ctx.arc(endX, endY, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   ctx.restore();
 }
 
 // =============================================================================
-// TIMER HUD (Bloc 5.3)
+// BURST WAVES RENDERING
 // =============================================================================
 
-function renderTimerHUD(ctx: CanvasRenderingContext2D, width: number, _height: number): void {
-  const timer = getTimer();
-  const minutes = timer.minutes.toString().padStart(2, '0');
-  const seconds = timer.seconds.toString().padStart(2, '0');
-
-  // Position en haut au centre
-  const x = width / 2;
-  const y = 30;
-
+/**
+ * Rend les ondes de choc du double-tap burst
+ */
+function renderBurstWaves(ctx: CanvasRenderingContext2D, bursts: Array<{ x: number; y: number; radius: number; maxRadius: number }>): void {
   ctx.save();
-  ctx.font = '20px "IBM Plex Mono", monospace';
-  ctx.fillStyle = timer.remaining < 60 ? COLORS.enemy : COLORS.annotation;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`${minutes}:${seconds}`, x, y);
+  
+  for (const burst of bursts) {
+    const progress = burst.radius / burst.maxRadius;
+    const opacity = (1 - progress) * 0.6; // Fade-out progressif
+    
+    // Cercle de l'onde
+    ctx.strokeStyle = getPlayerColorValue();
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = opacity;
+    ctx.setLineDash([]);
+    
+    ctx.beginPath();
+    ctx.arc(burst.x, burst.y, burst.radius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Cercle intérieur (plus lumineux)
+    ctx.globalAlpha = opacity * 0.5;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(burst.x, burst.y, burst.radius * 0.8, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
   ctx.restore();
 }
 
 // =============================================================================
-// SCORE HUD (Bloc 5.4)
+// COST INDICATOR (PROTOTYPE)
 // =============================================================================
 
-function renderScoreHUD(ctx: CanvasRenderingContext2D, width: number, _height: number): void {
-  const score = getScore();
+// Lazy import pour NODE_TYPES
+let nodeTypesCache: typeof import('../game/nodeTypes') | null = null;
 
-  // Position en haut à droite
-  const x = width - 20;
-  const y = 30;
-
+/**
+ * PROTOTYPE : Affiche un indicateur de coût discret à côté du curseur
+ */
+function renderCostIndicator(ctx: CanvasRenderingContext2D): void {
+  const lineInfo = getPredictiveLineInfo();
+  if (!lineInfo || !lineInfo.valid) return; // Seulement si dans la portée
+  
+  // Charger NODE_TYPES si nécessaire
+  if (!nodeTypesCache) {
+    import('../game/nodeTypes').then((module) => {
+      nodeTypesCache = module;
+    });
+    return; // Skip cette frame, affichera au prochain
+  }
+  
+  const nodeType = 'relay';
+  const typeData = nodeTypesCache.NODE_TYPES[nodeType];
+  const cost = typeData.cost;
+  
+  // Position à côté du curseur (offset)
+  const offsetX = lineInfo.placementOffset ? lineInfo.endX + lineInfo.placementOffset.x : lineInfo.endX;
+  const offsetY = lineInfo.placementOffset ? lineInfo.endY + lineInfo.placementOffset.y : lineInfo.endY;
+  
   ctx.save();
-  ctx.font = '16px "IBM Plex Mono", monospace';
-  ctx.textAlign = 'right';
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '11px "IBM Plex Mono", monospace';
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-
-  // Score joueur
-  ctx.fillStyle = COLORS.player;
-  ctx.fillText(`YOU: ${Math.floor(score.territoryScore)}`, x, y - 15);
-
-  // Score ennemi
-  ctx.fillStyle = COLORS.enemy;
-  ctx.fillText(`AI: ${Math.floor(score.enemyScore)}`, x, y + 10);
-
+  
+  // Afficher juste le nombre (discret)
+  ctx.fillText(`${cost}`, offsetX + 15, offsetY);
+  
   ctx.restore();
 }
 
@@ -343,6 +573,12 @@ function renderScoreHUD(ctx: CanvasRenderingContext2D, width: number, _height: n
 export function startEngine(context: CanvasContext): void {
   canvasContext = context;
   debugState.lastFpsUpdate = performance.now();
+  
+  // Initialiser le suivi de la souris (pour curseur et UI contextuelle)
+  if (context.canvas) {
+    initUIRenderer(context.canvas);
+  }
+  
   animationFrameId = requestAnimationFrame(render);
 }
 

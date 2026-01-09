@@ -1,9 +1,9 @@
 /**
- * Low Power Feedback (Bloc 4.4)
+ * Low Power Feedback - Bio-Digital Edition
  * Affiche un message [LOW POWER] clignotant quand l'énergie est insuffisante
  */
 
-import { COLORS } from '../types';
+import { COLORS } from '../game/constants';
 
 // =============================================================================
 // STATE
@@ -69,7 +69,7 @@ export function renderLowPowerFeedback(
   ctx.shadowBlur = 10;
 
   // Texte principal
-  ctx.fillStyle = COLORS.enemy; // Rouge/Terre cuite
+  ctx.fillStyle = COLORS.ENEMY; // Magenta
   ctx.font = 'bold 24px "IBM Plex Mono", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -77,7 +77,7 @@ export function renderLowPowerFeedback(
 
   // Sous-texte
   ctx.font = '14px "IBM Plex Mono", monospace';
-  ctx.fillStyle = COLORS.annotation;
+  ctx.fillStyle = COLORS.PLAYER; // Cyan
   ctx.shadowBlur = 5;
   ctx.fillText('Not enough energy', x, y + 30);
 

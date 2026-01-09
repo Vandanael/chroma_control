@@ -1,6 +1,6 @@
 /**
  * Chroma Control - Type Definitions
- * Sprint 0: Core types for game feel validation
+ * Bio-Digital Edition
  */
 
 // =============================================================================
@@ -47,27 +47,6 @@ export interface CanvasContext {
   dpr: number;  // Device Pixel Ratio for Retina
 }
 
-export interface DrawCommand {
-  type: 'point' | 'circle' | 'cross' | 'arc';
-  x: number;
-  y: number;
-  progress: number;  // 0-1 for animation
-  color: string;
-  size: number;
-  label?: string;
-}
-
-// =============================================================================
-// ANIMATION TYPES
-// =============================================================================
-
-export interface PlotterAnimation {
-  commands: DrawCommand[];
-  startTime: number;
-  duration: number;
-  complete: boolean;
-}
-
 // =============================================================================
 // DEBUG TYPES
 // =============================================================================
@@ -81,92 +60,6 @@ export interface DebugState {
   inputLatency: number;
   state: 'IDLE' | 'PRESSING' | 'RELEASED';
 }
-
-// =============================================================================
-// NEXUS TYPES (à partir du Sprint 1)
-// =============================================================================
-
-export type NexusOwner = 'neutral' | 'player' | 'enemy';
-export type NexusState = 'idle' | 'capturing' | 'owned' | 'contested';
-
-export interface Nexus {
-  id: string;
-  x: number;
-  y: number;
-  radius: number;
-  owner: NexusOwner;
-  state: NexusState;
-  /**
-   * Qui est en train de capturer (player/enemy).
-   */
-  capturingBy: NexusOwner;
-  /**
-   * Progression de capture 0-1 (3 secondes pour capture complète).
-   */
-  captureProgress: number;
-}
-
-// =============================================================================
-// LIENS (Sprint 4+)
-// =============================================================================
-
-export interface NexusLink {
-  id: string;
-  fromId: string;
-  toId: string;
-  owner: NexusOwner;
-  /**
-   * Timestamp de création (ms, via performance.now()) pour l’animation “plotter”.
-   */
-  createdAt: number;
-  /**
-   * Durée de l’animation de tracé (ms).
-   */
-  animationDuration: number;
-}
-
-// =============================================================================
-// TRIANGLES (Sprint 5+)
-// =============================================================================
-
-export interface Triangle {
-  id: string;
-  nexusIds: [string, string, string]; // Les 3 IDs des nexus formant le triangle
-  owner: NexusOwner;
-  /**
-   * Timestamp de formation (ms, via performance.now()) pour l’animation de hachures.
-   */
-  createdAt: number;
-  /**
-   * Durée de l’animation de complétion (ms).
-   */
-  animationDuration: number;
-}
-
-// =============================================================================
-// COLOR PALETTE - Pastel NASA-Punk
-// =============================================================================
-
-export const COLORS = {
-  // Background
-  paper: '#F5F2E8',
-  paperAlt: '#E8EDF2',
-
-  // Game elements
-  player: '#7BA3C9',
-  enemy: '#C98B7B',
-  neutral: '#9A9590',
-
-  // UI & Lines
-  ink: '#5C4A3D',
-  grid: '#D5D0C8',
-  annotation: '#4A6B8A',
-
-  // Unit feedback colors
-  scout: '#7BA3C9',
-  defender: '#4A6B8A',
-  attacker: '#C98B7B',
-} as const;
 
 // =============================================================================
 // TIMING CONSTANTS

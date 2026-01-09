@@ -1,6 +1,6 @@
 /**
  * Pathfinding A* - Calcul du chemin le plus court
- * Bloc 2.1 : Optimisé pour grille 25×16
+ * Optimisé pour grille 25×16 (Manhattan distance)
  */
 
 import { GridCell } from '../game/gridManager';

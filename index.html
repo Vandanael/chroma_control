@@ -2,10 +2,47 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#F5F2E8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#121214" />
+  
+  <!-- PWA Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Chroma Control" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="Chroma Control" />
+  
+  <!-- Empêcher le pull-to-refresh sur mobile -->
+  <meta name="overscroll-behavior" content="none" />
+  <style>
+    /* Empêcher le pull-to-refresh */
+    body {
+      overscroll-behavior-y: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    html {
+      overscroll-behavior: none;
+    }
+  </style>
+  
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com data:;
+    img-src 'self' data:;
+    connect-src 'self';
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self';
+  ">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Permissions-Policy" content="geolocation=(), microphone=(), camera=()">
+  
   <title>Chroma Control</title>
 
   <!-- IBM Plex Mono - Technical font -->
@@ -23,23 +60,29 @@
     html, body {
       width: 100%;
       height: 100%;
+      margin: 0;
+      padding: 0;
       overflow: hidden;
       touch-action: none;
       -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
-      background-color: #F5F2E8;
+      background-color: #121214; /* Deep Space */
       font-family: 'IBM Plex Mono', monospace;
     }
 
     #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       display: block;
-      width: 100%;
-      height: 100%;
       touch-action: none;
+      z-index: 0;
     }
 
-    /* START / REPLAY overlays */
+    /* START / GAME OVER / REPLAY overlays - Minimalist Retro-Futur */
     .screen-overlay {
       position: fixed;
       inset: 0;
@@ -48,36 +91,59 @@
       justify-content: center;
       pointer-events: auto;
       z-index: 900;
-      background: radial-gradient(circle at 20% 0%, rgba(232, 237, 242, 0.9), rgba(245, 242, 232, 0.96));
-      border: 1px solid #5C4A3D;
+      background: #050508; /* Noir légèrement bleuté */
+      transition: opacity 0.5s ease-out;
+      /* Gradient radial depuis le centre (couleur joueur, 3-5% opacité max) */
+      background-image: 
+        radial-gradient(circle at center, rgba(0, 243, 255, 0.04) 0%, transparent 70%),
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+      /* Texture noise monochrome 2% opacité */
+    }
+
+    .screen-overlay.fade-out {
+      opacity: 0;
+      pointer-events: none;
     }
 
     .screen-inner {
-      max-width: 360px;
+      max-width: 600px;
       width: 90%;
-      padding: 24px 20px 20px;
-      background: rgba(245, 242, 232, 0.98);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
-      border-radius: 18px;
-      border: 1px solid #D5D0C8;
+      padding: 0;
+      background: transparent;
+      box-shadow: none;
+      border-radius: 0;
+      border: none;
+      /* Centrage parfait avec Flexbox */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      /* Espacement généreux selon spécifications */
+      gap: 0;
     }
 
     .screen-title {
-      font-size: 20px;
-      letter-spacing: 0.28em;
+      font-size: 32px;
+      letter-spacing: 0.3em;
       text-transform: uppercase;
-      color: #5C4A3D;
+      color: #FFFFFF; /* Blanc pur ou couleur joueur selon sélection */
       text-align: center;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      font-weight: 400;
+      text-shadow: none; /* Pas de glow, pas d'ombre */
+      font-family: 'IBM Plex Mono', monospace;
     }
 
     .screen-subtitle {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
+      font-size: 14px;
+      text-transform: lowercase;
+      letter-spacing: 0.1em;
       text-align: center;
-      color: #9A9590;
-      margin-bottom: 18px;
+      color: #666666; /* Gris moyen */
+      margin-bottom: 0;
+      opacity: 1;
+      font-family: 'IBM Plex Mono', monospace;
+      font-weight: 300;
     }
 
     .planet-orbit {
@@ -123,95 +189,105 @@
       animation: planet-spin 9s linear infinite;
     }
 
-    .start-meta {
-      font-size: 10px;
-      color: #4A6B8A;
-      text-align: center;
-      margin-bottom: 20px;
-    }
 
     .cta-button {
-      width: 100%;
-      border: 1px solid #4A6B8A;
-      background: linear-gradient(135deg, #E8EDF2, #F5F2E8);
-      color: #4A6B8A;
-      padding: 10px 14px;
+      width: 60%;
+      border: 1px solid; /* Contour 1px couleur joueur */
+      background: transparent; /* Fond transparent (ou 5% de la couleur) */
+      color: inherit; /* Couleur joueur */
+      padding: 16px 24px;
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 12px;
-      letter-spacing: 0.16em;
+      font-size: 14px;
+      letter-spacing: 0.2em;
       text-transform: uppercase;
-      border-radius: 999px;
+      border-radius: 0;
       cursor: pointer;
       position: relative;
-      overflow: hidden;
+      transition: all 0.3s ease;
+      box-shadow: none; /* Pas de glow */
+      margin: 0 auto;
     }
 
-    .cta-button::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      border: 1px dashed rgba(74, 107, 138, 0.32);
-      pointer-events: none;
+    .cta-button:hover {
+      background: rgba(0, 0, 0, 0.1); /* Fond rempli à 10% */
+      transform: none;
     }
 
     .cta-button:active {
-      transform: translateY(1px);
-      box-shadow: inset 0 0 0 1px rgba(74, 107, 138, 0.32);
+      transform: none;
     }
 
-    .screen-footer {
-      margin-top: 10px;
-      display: flex;
-      justify-content: space-between;
-      font-size: 9px;
-      color: #9A9590;
+    .cta-button.defeat {
+      border-color: #FF0055;
+      color: #FF0055;
+      box-shadow: none;
     }
 
-    /* DEBUG overlay */
+    .cta-button.defeat:hover {
+      background: rgba(255, 0, 85, 0.1);
+      box-shadow: none;
+    }
+
+    .color-button {
+      padding: 12px 24px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      border-radius: 0;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 1px solid; /* Contour 1px de la couleur correspondante */
+      background: transparent; /* Fond transparent */
+      color: inherit; /* Couleur correspondante */
+      box-shadow: none; /* Pas de glow */
+    }
+
+    .color-button:hover,
+    .color-button.selected {
+      background: rgba(0, 0, 0, 0.1); /* Fond rempli à 10% opacité */
+      transform: none;
+      box-shadow: none;
+    }
+
+
+    /* DEBUG overlay - Bio-Digital Style */
     #debug-overlay {
       position: fixed;
       top: 10px;
       left: 10px;
-      background: rgba(245, 242, 232, 0.95);
-      border: 1px solid #5C4A3D;
-      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      padding: 0;
       font-family: 'IBM Plex Mono', monospace;
-      font-size: 12px;
-      color: #4A6B8A;
+      font-size: 10px;
+      color: #00F3FF;
+      opacity: 0.5;
       z-index: 1000;
-      min-width: 200px;
-      line-height: 1.6;
+      line-height: 1.4;
+      pointer-events: none;
     }
 
     #debug-overlay .label {
-      color: #9A9590;
+      color: #666666;
       text-transform: uppercase;
       font-size: 10px;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.1em;
     }
 
     #debug-overlay .value {
-      color: #5C4A3D;
-      font-weight: 500;
+      color: #00F3FF;
+      font-weight: 400;
+      opacity: 0.7;
     }
 
-    #debug-overlay .unit-scout { color: #7BA3C9; }
-    #debug-overlay .unit-defender { color: #4A6B8A; }
-    #debug-overlay .unit-attacker { color: #C98B7B; }
+    #debug-overlay .unit-scout { color: #00F3FF; }
+    #debug-overlay .unit-defender { color: #00F3FF; }
+    #debug-overlay .unit-attacker { color: #00F3FF; }
 
     #btn-debug-end {
-      margin-top: 6px;
-      width: 100%;
-      font-size: 9px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      border-radius: 999px;
-      padding: 4px 6px;
-      border: 1px dashed #C98B7B;
-      background: transparent;
-      color: #C98B7B;
-      cursor: pointer;
+      display: none; /* Caché */
     }
 
     /* Animations */
@@ -237,92 +313,183 @@
 <body>
   <canvas id="game-canvas"></canvas>
 
-  <!-- SCORE HUD (Sprint 1) -->
-  <div id="score-hud" style="
+  <!-- HUD COCKPIT - Barre Supérieure -->
+  <div id="hud-top" style="
     position: fixed;
-    top: 12px;
-    right: 14px;
-    padding: 6px 10px;
-    border-radius: 999px;
-    border: 1px solid #4A6B8A;
-    background: rgba(245, 242, 232, 0.92);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    background: rgba(34, 34, 34, 0.85);
+    backdrop-filter: blur(4px);
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: #4A6B8A;
-    z-index: 950;
+    font-size: 14px;
+    color: #FFFFFF;
+    z-index: 10;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   ">
-    000
+    <div id="hud-player-score" style="color: #00F3FF;">PLAYER: 0%</div>
+    <div id="hud-timer" style="font-size: 24px; font-weight: 700; letter-spacing: 0.1em;">00:00</div>
+    <div id="hud-enemy-score" style="color: #FF0055;">ENEMY: 0%</div>
   </div>
 
-  <!-- ÉNERGIE HUD (Sprint 4) -->
-  <div id="energy-hud" style="
+  <!-- HUD COCKPIT - Barre Inférieure -->
+  <div id="hud-bottom" style="
     position: fixed;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 6px 14px;
-    border-radius: 999px;
-    border: 1px solid #5C4A3D;
-    background: rgba(245, 242, 232, 0.96);
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 80px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    background: #222222;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: #4A6B8A;
-    z-index: 950;
+    font-size: 12px;
+    color: #FFFFFF;
+    z-index: 10;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    /* Safe areas appliquées via JavaScript */
   ">
-    ⚡ 050 / 100
+    <!-- Bloc Gauche : Signal Strength -->
+    <div id="hud-signal" style="display: flex; flex-direction: column; gap: 4px; opacity: 0.7;">
+      <div style="text-transform: uppercase; letter-spacing: 0.1em; color: #00F3FF;">SIGNAL REACH: <span id="signal-range">200</span>px</div>
+      <div style="font-size: 11px; color: #666; letter-spacing: 0.05em;">Network Density: <span id="network-density">2</span> nodes</div>
+    </div>
+    
+    <!-- Bloc Droit : Contexte Action -->
+    <div id="hud-context" style="display: flex; flex-direction: row; align-items: center; gap: 12px;">
+      <span id="context-icon" style="font-size: 20px;">⚪</span>
+      <span id="context-text" style="text-transform: uppercase; letter-spacing: 0.1em;">--</span>
+    </div>
+    
+    <!-- Message "Too Far" flottant (élégant et intégré) -->
+    <div id="too-far-message" style="
+      position: absolute;
+      display: none;
+      padding: 6px 12px;
+      background: rgba(18, 18, 20, 0.95);
+      color: #FF0055;
+      border: 1px solid rgba(255, 0, 85, 0.5);
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      z-index: 1000;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 2px 8px rgba(255, 0, 85, 0.3);
+    ">TOO FAR FROM SIGNAL</div>
+    
+    <!-- Bouton "Orbit View" (apparaît après 70% saturation) -->
+    <button id="orbit-view-button" style="
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+      padding: 20px 40px;
+      background: rgba(0, 243, 255, 0.1);
+      border: 2px solid #00F3FF;
+      border-radius: 8px;
+      color: #00F3FF;
+      font-size: 18px;
+      font-family: monospace;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      z-index: 1001;
+      transition: all 0.3s;
+      box-shadow: 0 0 30px rgba(0, 243, 255, 0.5);
+    " onmouseenter="this.style.background='rgba(0, 243, 255, 0.2)'; this.style.boxShadow='0 0 50px rgba(0, 243, 255, 0.8)';" onmouseleave="this.style.background='rgba(0, 243, 255, 0.1)'; this.style.boxShadow='0 0 30px rgba(0, 243, 255, 0.5)';">
+      ⬆ ORBIT VIEW ⬆
+    </button>
   </div>
 
   <!-- START SCREEN -->
-  <div id="start-screen" class="screen-overlay">
+  <div id="start-screen" class="screen-overlay" style="display: flex;">
     <div class="screen-inner">
-      <div class="screen-title">CHROMA CONTROL</div>
-      <div class="screen-subtitle">Signal Acquisition Protocol · v0.0</div>
-
-      <div class="planet-orbit">
-        <svg viewBox="0 0 120 120">
-          <!-- Orbit path (table traçante) -->
-          <circle
-            class="orbit-path"
-            cx="60"
-            cy="60"
-            r="46"
-          />
-
-          <!-- Rotating planet + ring -->
-          <g class="planet-rotation">
-            <circle class="planet" cx="60" cy="34" r="8" />
-            <ellipse
-              class="planet-ring"
-              cx="60"
-              cy="34"
-              rx="13"
-              ry="5"
-            />
-          </g>
-        </svg>
+      <!-- 20% vide en haut (via padding-top) -->
+      <div style="padding-top: 20vh;"></div>
+      
+      <div id="start-title" class="screen-title" style="transition: all 0.3s ease;">CHROMA CONTROL</div>
+      
+      <!-- 15% vide -->
+      <div style="height: 15vh;"></div>
+      
+      <!-- Orb Animation Canvas -->
+      <div id="planet-animation-container" style="width: 160px; height: 160px; margin: 0 auto;"></div>
+      
+      <!-- 10% vide -->
+      <div style="height: 10vh;"></div>
+      
+      <div class="screen-subtitle">
+        expand your color
       </div>
 
-      <div class="start-meta">
-        Maintiens le contact pour scanner la surface.<br />
-        La forme détectée détermine l’unité à déployer.
+      <!-- 10% vide -->
+      <div style="height: 10vh;"></div>
+
+      <!-- Color Selection Buttons -->
+      <div style="display: flex; gap: 24px; justify-content: center; margin-bottom: 0;">
+        <button id="btn-color-cyan" class="color-button" data-color="CYAN" style="border-color: #00F3FF; color: #00F3FF;">
+          CYAN
+        </button>
+        <button id="btn-color-green" class="color-button" data-color="GREEN" style="border-color: #00FF88; color: #00FF88;">
+          GREEN
+        </button>
+        <button id="btn-color-amber" class="color-button" data-color="AMBER" style="border-color: #FFAA00; color: #FFAA00;">
+          AMBER
+        </button>
       </div>
 
-      <button id="btn-initiate-signal" class="cta-button">
-        INITIATE SIGNAL
+      <!-- 10% vide -->
+      <div style="height: 10vh;"></div>
+
+      <button id="btn-initiate-signal" class="cta-button" style="border-color: #00F3FF; color: #00F3FF;">
+        START
       </button>
+      
+      <!-- 15% vide en bas -->
+      <div style="padding-bottom: 15vh;"></div>
 
-      <div class="screen-footer">
-        <span>SCOUT &lt; 300ms · DEF 300-1500ms · ATK &gt; 1500ms</span>
-        <span>SPRINT 0</span>
+      <div class="screen-footer" style="margin-top: 60px; text-align: center; color: #888888; font-size: 12px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 0.1em; opacity: 0.8; font-weight: 400;">
+        Made by Vandanael
       </div>
     </div>
   </div>
 
-  <!-- REPLAY SCREEN -->
+  <!-- GAME OVER SCREEN -->
+  <div id="game-over-screen" class="screen-overlay">
+    <div class="screen-inner">
+      <div id="game-over-title" class="screen-title">SYSTEM SECURE</div>
+      <div class="screen-subtitle">Network Status</div>
+
+      <div style="text-align:center; margin: 24px 0 20px;">
+        <div id="game-over-message" style="font-size:14px; color: #00F3FF; line-height: 1.6; margin-bottom: 16px;">
+          Réseau stabilisé.<br />
+          Tous les nœuds sont sécurisés.
+        </div>
+      </div>
+
+      <button id="btn-reboot-system" class="cta-button">
+        REBOOT SYSTEM
+      </button>
+
+      <div class="screen-footer" style="margin-top: 20px; text-align: center; color: #FFFFFF; opacity: 0.5; font-size: 10px;">
+        <span>Ready for next cycle</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- REPLAY SCREEN (Legacy) -->
   <div id="replay-screen" class="screen-overlay">
     <div class="screen-inner">
       <div class="screen-title">REPLAY</div>
@@ -348,13 +515,14 @@
     </div>
   </div>
 
-  <div id="debug-overlay">
-    <div><span class="label">FPS:</span> <span id="debug-fps" class="value">--</span></div>
-    <div><span class="label">Press Time:</span> <span id="debug-press-time" class="value">0 ms</span></div>
-    <div><span class="label">Unit:</span> <span id="debug-unit" class="value">--</span></div>
-    <div><span class="label">Input Latency:</span> <span id="debug-latency" class="value">-- ms</span></div>
-    <div><span class="label">State:</span> <span id="debug-state" class="value">IDLE</span></div>
-    <button id="btn-debug-end">FORCE REPLAY</button>
+  <!-- PROTOTYPE : Debug overlay désactivé pour version Review -->
+  <div id="debug-overlay" style="display: none;">
+    <div>
+      <span class="label">FPS:</span> <span id="debug-fps" class="value">--</span> | 
+      <span class="label">IN:</span> <span id="debug-latency" class="value">--</span>ms | 
+      <span class="label">HOLD:</span> <span id="debug-press-time" class="value">0</span>ms
+    </div>
+    <button id="btn-debug-end" style="display: none;">FORCE REPLAY</button>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

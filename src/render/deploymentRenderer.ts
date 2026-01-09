@@ -1,14 +1,10 @@
 /**
- * Deployment Renderer
- * Bloc 2.2 : Rendu visuel des déploiements d'avant-poste
- * 
- * - Phase 1 (Transit) : Effet flash éphémère sur cellules traversées
- * - Phase 2 (Impact) : Avant-poste avec annotation [OUTPOST]
- * - Phase 3 (Expansion) : Animation expansion cross
+ * Deployment Renderer - Bio-Digital Edition
+ * Rendu organique du signal "seringue" : Point lumineux qui voyage avec trail
  */
 
 import { getActiveDeployments, OutpostDeployment } from '../game/outpostDeployment';
-import { COLORS } from '../types';
+import { COLORS } from '../game/constants';
 
 // =============================================================================
 // MAIN RENDER
@@ -37,38 +33,106 @@ export function renderDeployments(ctx: CanvasRenderingContext2D): void {
 }
 
 // =============================================================================
-// PHASE 1 - TRANSIT (Signal Éphémère)
+// PHASE 1 - TRANSIT (Signal "Seringue" Organique)
 // =============================================================================
 
 function renderTransitPhase(ctx: CanvasRenderingContext2D, deployment: OutpostDeployment): void {
   const now = performance.now();
   const currentCell = deployment.path[deployment.currentIndex];
+  const nextCell = deployment.path[deployment.currentIndex + 1];
 
   if (!currentCell) return;
 
-  // Effet flash sur la cellule actuelle
-  const flashProgress = 1 - (deployment.nextCellTime - now) / 250;
-  const alpha = Math.max(0, Math.min(1, flashProgress));
-
   // Couleur selon le propriétaire
-  const color = deployment.owner === 'player' ? COLORS.player : COLORS.enemy;
+  const color = deployment.owner === 'player' ? COLORS.PLAYER : COLORS.ENEMY;
 
-  // Flash blanc/couleur
+  // Calculer la position interpolée du point lumineux
+  const currentCenterX = currentCell.x + currentCell.size / 2;
+  const currentCenterY = currentCell.y + currentCell.size / 2;
+
+  let signalX = currentCenterX;
+  let signalY = currentCenterY;
+
+  // Si on a une cellule suivante, interpoler la position
+  if (nextCell) {
+    const nextCenterX = nextCell.x + nextCell.size / 2;
+    const nextCenterY = nextCell.y + nextCell.size / 2;
+    
+    // Progression dans la transition (0 = début cellule actuelle, 1 = fin)
+    const progress = 1 - (deployment.nextCellTime - now) / 250;
+    const clampedProgress = Math.max(0, Math.min(1, progress));
+    
+    // Interpolation linéaire
+    signalX = currentCenterX + (nextCenterX - currentCenterX) * clampedProgress;
+    signalY = currentCenterY + (nextCenterY - currentCenterY) * clampedProgress;
+  }
+
+  // Dessiner le trail (traînée derrière le point)
+  drawTrail(ctx, deployment, color);
+
+  // Dessiner le point lumineux principal (effet "seringue")
   ctx.save();
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = color;
   ctx.fillStyle = color;
-  ctx.globalAlpha = alpha * 0.4; // Flash à 40% max d'opacité
-  ctx.fillRect(currentCell.x, currentCell.y, currentCell.size, currentCell.size);
-
-  // Bordure plus visible
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.globalAlpha = alpha * 0.8;
-  ctx.strokeRect(currentCell.x, currentCell.y, currentCell.size, currentCell.size);
-
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  ctx.arc(signalX, signalY, 8, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Cœur plus lumineux
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.arc(signalX, signalY, 3, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 
   // Tracer le chemin restant (lignes pointillées)
   renderPathPreview(ctx, deployment);
+}
+
+/**
+ * Dessine la traînée (trail) derrière le point lumineux
+ */
+function drawTrail(ctx: CanvasRenderingContext2D, deployment: OutpostDeployment, color: string): void {
+  const currentIndex = deployment.currentIndex;
+  
+  if (currentIndex === 0) return; // Pas de trail au début
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  // Dessiner le trail depuis le début jusqu'à la position actuelle
+  for (let i = 0; i <= currentIndex && i < deployment.path.length; i++) {
+    const cell = deployment.path[i];
+    const cellCenterX = cell.x + cell.size / 2;
+    const cellCenterY = cell.y + cell.size / 2;
+    
+    // Opacité décroissante pour les cellules anciennes
+    const age = currentIndex - i;
+    const alpha = Math.max(0.1, 1 - age * 0.3);
+    
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.lineWidth = 4 - age * 0.5;
+    
+    // Si ce n'est pas la dernière cellule, tracer une ligne vers la suivante
+    if (i < currentIndex && i < deployment.path.length - 1) {
+      const nextCell = deployment.path[i + 1];
+      const nextCenterX = nextCell.x + nextCell.size / 2;
+      const nextCenterY = nextCell.y + nextCell.size / 2;
+      
+      ctx.beginPath();
+      ctx.moveTo(cellCenterX, cellCenterY);
+      ctx.lineTo(nextCenterX, nextCenterY);
+      ctx.stroke();
+    }
+  }
+  
+  ctx.restore();
 }
 
 // =============================================================================
@@ -76,7 +140,7 @@ function renderTransitPhase(ctx: CanvasRenderingContext2D, deployment: OutpostDe
 // =============================================================================
 
 function renderPathPreview(ctx: CanvasRenderingContext2D, deployment: OutpostDeployment): void {
-  const color = deployment.owner === 'player' ? COLORS.player : COLORS.enemy;
+  const color = deployment.owner === 'player' ? COLORS.PLAYER : COLORS.ENEMY;
 
   ctx.save();
   ctx.strokeStyle = color;

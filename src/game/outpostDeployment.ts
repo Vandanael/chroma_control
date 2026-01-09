@@ -1,8 +1,8 @@
 /**
- * Outpost Deployment System
- * Bloc 2.2 : Système de déploiement d'avant-poste en 3 phases
+ * Outpost Deployment System - Bio-Digital Edition
+ * Système de déploiement d'avant-poste en 3 phases
  * 
- * Phase 1 - Transit : Signal éphémère (250ms/cellule)
+ * Phase 1 - Transit : Signal "seringue" organique (250ms/cellule)
  * Phase 2 - Impact : Création avant-poste
  * Phase 3 - Expansion : Capture cross pattern (4 voisins)
  */

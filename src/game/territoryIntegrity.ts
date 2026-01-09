@@ -1,5 +1,5 @@
 /**
- * Territory Integrity System - Bloc 2.4
+ * Territory Integrity System - Bio-Digital Edition
  * Flood Fill depuis HQ pour déterminer connectivité
  * Cellules isolées dépérissent (-15/s), connectées se renforcent (+5/s)
  */

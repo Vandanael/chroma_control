@@ -17,10 +17,11 @@ export interface GridCell {
   size: number;     // Cell size (square)
   owner: CellOwner;
   isHQ: boolean;    // Headquarters flag
-  isOutpost: boolean; // Avant-Poste flag (Bloc 2.2)
-  isFortified: boolean; // Fortified flag (Bloc 4.2)
-  signalStrength: number; // 0-100 (Bloc 4.3)
-  isConnected: boolean; // Bloc 2.4: Connecté au HQ via flood fill
+  isOutpost: boolean; // Avant-Poste flag
+  isFortified: boolean; // Fortified flag
+  signalStrength: number; // 0-100
+  isConnected: boolean; // Connecté au HQ via flood fill
+  creationTime?: number; // Timestamp de création pour animation spring (ms)
 }
 
 // =============================================================================
@@ -89,6 +90,14 @@ export function initGrid(canvasWidth: number, canvasHeight: number): void {
   console.log(`[GridManager] Cell size: ${cellSize}px, Padding: ${PADDING}px`);
 }
 
+/**
+ * Reset the grid (clear all cells - will be reinitialized automatically)
+ */
+export function resetGrid(): void {
+  cells = [];
+  console.log('[GridManager] Grid reset');
+}
+
 // =============================================================================
 // ACCESSORS
 // =============================================================================
@@ -136,11 +145,12 @@ export function captureAsOutpost(col: number, row: number, owner: CellOwner): vo
     cell.owner = owner;
     cell.isOutpost = true;
     cell.signalStrength = 100;
+    cell.creationTime = performance.now(); // Pour animation spring
   }
 }
 
 /**
- * Fortify a cell (Bloc 4.2)
+ * Fortify a cell
  */
 export function fortifyCell(col: number, row: number): boolean {
   const cell = getCellAt(col, row);
@@ -207,16 +217,35 @@ export function getCrossNeighbors(col: number, row: number): GridCell[] {
 export function captureCrossNeighbors(col: number, row: number, owner: CellOwner): GridCell[] {
   const neighbors = getCrossNeighbors(col, row);
   const captured: GridCell[] = [];
+  const now = performance.now();
   
   for (const neighbor of neighbors) {
     if (neighbor.owner !== owner) {
       neighbor.owner = owner;
       neighbor.isOutpost = false; // Les voisins capturés ne sont pas des avant-postes
       neighbor.signalStrength = 100;
+      neighbor.creationTime = now; // Pour animation spring
       captured.push(neighbor);
     }
   }
   
   console.log(`[GridManager] Captured ${captured.length} cross neighbors at (${col}, ${row})`);
   return captured;
+}
+
+/**
+ * Attack/Sabotage an enemy cell (converts it to neutral)
+ */
+export function attackEnemyCell(col: number, row: number): boolean {
+  const cell = getCellAt(col, row);
+  if (cell && cell.owner === 'enemy') {
+    // Convertir la cellule ennemie en neutre (sabotage)
+    cell.owner = 'neutral';
+    cell.isOutpost = false;
+    cell.isFortified = false;
+    cell.signalStrength = 0;
+    console.log(`[GridManager] Enemy cell (${col}, ${row}) sabotaged → neutral`);
+    return true;
+  }
+  return false;
 }

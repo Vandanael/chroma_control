@@ -1,152 +1,157 @@
 /**
- * Grid Renderer - 25x16 Tactical Grid
- * NASA-Punk style: Thin borders, paper grain, technical annotations
+ * Grid Renderer - Bio-Network Edition
+ * Rendu organique : Nœuds (cercles) + Synapses (lignes épaisses)
  */
 
-import { COLORS } from '../types';
+import { COLORS } from '../game/constants';
 import { getCells, type GridCell, getCellAt } from '../game/gridManager';
-import { renderCellSignal } from './signalGradients';
 
 // =============================================================================
 // RENDERING
 // =============================================================================
 
 /**
- * Render all grid cells
+ * Render all grid cells in Bio-Network style
+ * Pipeline: Fond subtil → Synapses → Nœuds
  */
 export function renderGrid(ctx: CanvasRenderingContext2D): void {
   const cells = getCells();
   
-  for (const cell of cells) {
-    drawCell(ctx, cell);
-  }
-}
+  if (cells.length === 0) return;
 
-/**
- * Draw a single cell
- */
-function drawCell(ctx: CanvasRenderingContext2D, cell: GridCell): void {
-  const { x, y, size, isHQ, owner, isConnected } = cell;
-  
-  // === FEEDBACK VISUEL : Cellules isolées (Bloc 2.4) ===
-  if (owner !== 'neutral' && !isConnected) {
-    // Teinte grisâtre pour cellules en train de mourir
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-    ctx.fillRect(x, y, size, size);
-    
-    // Clignotement (pulse)
-    const pulse = Math.sin(Date.now() / 300) * 0.5 + 0.5; // 0-1
-    ctx.fillStyle = `rgba(200, 50, 50, ${pulse * 0.3})`; // Rouge pulsé
-    ctx.fillRect(x, y, size, size);
-  }
-  
-  // Gradient de signal (Bloc 1.4)
-  renderCellSignal(ctx, cell);
-  
-  // === BORDURES ORGANIQUES (Bloc 2.4 - Effet Mousse) ===
-  // Ne dessiner que les bordures extérieures (pas les frontières internes)
-  if (owner !== 'neutral') {
-    drawOrganicBorders(ctx, cell);
-  } else {
-    // Cellules neutres : bordures normales fines
-    ctx.strokeStyle = '#444444';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x, y, size, size);
-  }
-  
-  // Hachures pour cellules fortifiées (Bloc 4.2)
-  if (cell.isFortified) {
-    drawFortificationHatching(ctx, cell);
-  }
-
-  // Labels
-  ctx.fillStyle = COLORS.annotation;
-  ctx.font = '10px "IBM Plex Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  if (isHQ) {
-    ctx.fillText('[HQ]', x + size / 2, y + size / 2);
-  } else if (cell.isOutpost) {
-    ctx.fillText('[OUTPOST]', x + size / 2, y + size / 2);
-  } else if (cell.isFortified) {
-    ctx.fillText('[FORTIFIED]', x + size / 2, y + size / 2);
-  }
-}
-
-/**
- * Draw fortification hatching (technical style, 45°)
- */
-function drawFortificationHatching(ctx: CanvasRenderingContext2D, cell: GridCell): void {
-  const { x, y, size } = cell;
-  const spacing = 6; // Espacement entre les lignes
-
+  // ÉTAPE A : LE FOND (Subtil)
+  // Dessine un tout petit point au centre de chaque cellule vide
   ctx.save();
-  ctx.strokeStyle = COLORS.ink; // Encre sépia
-  ctx.lineWidth = 0.5;
-  ctx.globalAlpha = 0.6;
-
-  // Hachures diagonales 45°
-  ctx.beginPath();
-  for (let i = -size; i < size * 2; i += spacing) {
-    ctx.moveTo(x + i, y);
-    ctx.lineTo(x + i + size, y + size);
+  ctx.fillStyle = '#333333';
+  for (const cell of cells) {
+    if (cell.owner === 'neutral') {
+      const centerX = cell.x + cell.size / 2;
+      const centerY = cell.y + cell.size / 2;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
-  ctx.stroke();
+  ctx.restore();
 
+  // ÉTAPE B : LES SYNAPSES (Connexions) - DESSINER EN PREMIER
+  // Dessine les lignes épaisses entre voisins de même couleur
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  
+  // Synapses pour le joueur (Cyan)
+  ctx.strokeStyle = COLORS.PLAYER;
+  ctx.lineWidth = 0; // Sera défini par cellule
+  drawSynapses(ctx, cells, 'player');
+  
+  // Synapses pour l'ennemi (Magenta)
+  ctx.strokeStyle = COLORS.ENEMY;
+  drawSynapses(ctx, cells, 'enemy');
+  
+  ctx.restore();
+
+  // ÉTAPE C : LES NŒUDS (Cellules) - DESSINER AU-DESSUS
+  // Dessine les cercles au centre de chaque cellule active
+  ctx.save();
+  
+  for (const cell of cells) {
+    if (cell.owner !== 'neutral') {
+      drawNode(ctx, cell);
+    }
+  }
+  
   ctx.restore();
 }
 
-// =============================================================================
-// ORGANIC BORDERS (Bloc 2.4 - Effet Mousse)
-// =============================================================================
+/**
+ * Dessine les synapses (lignes) entre voisins de même couleur
+ */
+function drawSynapses(
+  ctx: CanvasRenderingContext2D,
+  cells: GridCell[],
+  owner: 'player' | 'enemy'
+): void {
+  const activeCells = cells.filter(c => c.owner === owner);
+  
+  for (const cell of activeCells) {
+    const centerX = cell.x + cell.size / 2;
+    const centerY = cell.y + cell.size / 2;
+    const synapseWidth = cell.size * 0.4; // 40% de la taille de la cellule
+    
+    ctx.lineWidth = synapseWidth;
+    
+    // Vérifier les 4 voisins (Haut, Bas, Gauche, Droite)
+    const neighbors = [
+      getCellAt(cell.col, cell.row - 1), // Haut
+      getCellAt(cell.col, cell.row + 1), // Bas
+      getCellAt(cell.col - 1, cell.row), // Gauche
+      getCellAt(cell.col + 1, cell.row), // Droite
+    ];
+    
+    for (const neighbor of neighbors) {
+      if (neighbor && neighbor.owner === owner) {
+        const neighborCenterX = neighbor.x + neighbor.size / 2;
+        const neighborCenterY = neighbor.y + neighbor.size / 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(neighborCenterX, neighborCenterY);
+        ctx.stroke();
+      }
+    }
+  }
+}
 
 /**
- * Dessine uniquement les bordures extérieures du territoire
- * (fusion des cellules du même owner)
+ * Easing function pour animation spring (rebond avec overshoot)
+ * easeOutBack avec overshoot de 1.5
  */
-function drawOrganicBorders(ctx: CanvasRenderingContext2D, cell: GridCell): void {
-  const { x, y, size, owner, col, row } = cell;
-  
-  // Couleur du contour selon owner
-  const borderColor = owner === 'player' ? COLORS.player : COLORS.enemy;
-  
-  ctx.strokeStyle = borderColor;
-  ctx.lineWidth = 1.5; // Plus épais pour bien délimiter le territoire
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+function easeOutBack(t: number): number {
+  const c1 = 1.5;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
 
-  // Vérifier les 4 voisins
-  const top = getCellAt(col, row - 1);
-  const bottom = getCellAt(col, row + 1);
-  const left = getCellAt(col - 1, row);
-  const right = getCellAt(col + 1, row);
-
+/**
+ * Dessine un nœud (cercle) au centre d'une cellule avec animation spring
+ */
+function drawNode(ctx: CanvasRenderingContext2D, cell: GridCell): void {
+  const centerX = cell.x + cell.size / 2;
+  const centerY = cell.y + cell.size / 2;
+  const baseRadius = cell.size * 0.3; // 30% de la taille de la cellule
+  
+  // Animation spring si la cellule vient d'être créée
+  let scale = 1;
+  if (cell.creationTime) {
+    const now = performance.now();
+    const age = now - cell.creationTime;
+    const duration = 300; // 300ms d'animation
+    
+    if (age < duration) {
+      const progress = age / duration;
+      scale = easeOutBack(progress);
+    } else {
+      // Nettoyer creationTime après l'animation
+      delete cell.creationTime;
+    }
+  }
+  
+  const radius = baseRadius * scale;
+  
+  // Couleur selon le propriétaire
+  const color = cell.owner === 'player' ? COLORS.PLAYER : COLORS.ENEMY;
+  
+  // Effet Néon (shadowBlur) - plus intense pendant l'animation
+  ctx.shadowBlur = 15 + (scale > 1 ? (scale - 1) * 10 : 0);
+  ctx.shadowColor = color;
+  
+  // Cercle rempli
+  ctx.fillStyle = color;
   ctx.beginPath();
-
-  // TOP : Dessiner si pas de voisin OU voisin différent owner
-  if (!top || top.owner !== owner) {
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + size, y);
-  }
-
-  // RIGHT : Dessiner si pas de voisin OU voisin différent owner
-  if (!right || right.owner !== owner) {
-    ctx.moveTo(x + size, y);
-    ctx.lineTo(x + size, y + size);
-  }
-
-  // BOTTOM : Dessiner si pas de voisin OU voisin différent owner
-  if (!bottom || bottom.owner !== owner) {
-    ctx.moveTo(x + size, y + size);
-    ctx.lineTo(x, y + size);
-  }
-
-  // LEFT : Dessiner si pas de voisin OU voisin différent owner
-  if (!left || left.owner !== owner) {
-    ctx.moveTo(x, y + size);
-    ctx.lineTo(x, y);
-  }
-
-  ctx.stroke();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Réinitialiser shadow pour ne pas affecter les autres éléments
+  ctx.shadowBlur = 0;
 }

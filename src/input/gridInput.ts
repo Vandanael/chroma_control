@@ -1,38 +1,70 @@
 /**
  * Grid Input Handler
- * Bloc 2.2 : Gestion des clics sur la grille pour déploiement d'avant-poste
- * Bloc 4.2 : Deep Click pour fortification
+ * Smart Context System : 1 Clic = 1 Action Contextuelle
+ * - NEUTRAL → SCOUT (Déploiement Avant-Poste) : 10 Énergie
+ * - PLAYER → DEFEND (Renforcement / Shield) : 20 Énergie
+ * - ENEMY → ATTACK (Attaque / Sabotage) : 30 Énergie
  */
 
-import { getCellAtPosition, fortifyCell, getFortifiedCells, unfortifyCell } from '../game/gridManager';
+import { getCellAtPosition, fortifyCell, getFortifiedCells, unfortifyCell, attackEnemyCell, GridCell } from '../game/gridManager';
 import { initiateOutpostDeployment } from '../game/outpostDeployment';
 import { spendEnergy, getEnergy } from '../game/state';
 import { showLowPowerFeedback } from '../render/lowPowerFeedback';
 
 // =============================================================================
-// STATE (Deep Click)
+// ACTION TYPES
 // =============================================================================
 
-interface DeepClickState {
-  active: boolean;
-  startTime: number;
-  startX: number;
-  startY: number;
-  targetCol: number;
-  targetRow: number;
+export type ActionType = 'SCOUT' | 'DEFEND' | 'ATTACK' | 'NONE';
+
+export interface ActionInfo {
+  type: ActionType;
+  cost: number;
+  cursorShape: 'circle' | 'square' | 'triangle';
 }
 
-const deepClickState: DeepClickState = {
-  active: false,
-  startTime: 0,
-  startX: 0,
-  startY: 0,
-  targetCol: -1,
-  targetRow: -1,
-};
+// =============================================================================
+// ACTION COSTS
+// =============================================================================
 
-const DEEP_CLICK_THRESHOLD_MS = 2000; // 2 secondes
-const FORTIFY_COST = 20;
+const SCOUT_COST = 5;  // Réduit pour rendre le jeu moins punitif
+const DEFEND_COST = 20;
+const ATTACK_COST = 30;
+
+// =============================================================================
+// ACTION DETECTION
+// =============================================================================
+
+/**
+ * Détermine l'action à exécuter selon la cellule cible
+ */
+export function getActionFromTarget(targetCell: GridCell | null): ActionInfo {
+  if (!targetCell) {
+    return { type: 'NONE', cost: 0, cursorShape: 'circle' };
+}
+
+  switch (targetCell.owner) {
+    case 'neutral':
+      return { type: 'SCOUT', cost: SCOUT_COST, cursorShape: 'circle' };
+    
+    case 'player':
+      return { type: 'DEFEND', cost: DEFEND_COST, cursorShape: 'square' };
+    
+    case 'enemy':
+      return { type: 'ATTACK', cost: ATTACK_COST, cursorShape: 'triangle' };
+    
+    default:
+      return { type: 'NONE', cost: 0, cursorShape: 'circle' };
+  }
+}
+
+/**
+ * Récupère l'action pour une position donnée (pour le curseur et l'UI)
+ */
+export function getActionAtPosition(x: number, y: number): ActionInfo {
+  const cell = getCellAtPosition(x, y);
+  return getActionFromTarget(cell);
+}
 
 // =============================================================================
 // SETUP
@@ -43,37 +75,7 @@ const FORTIFY_COST = 20;
  */
 export function initGridInput(canvas: HTMLCanvasElement): void {
   canvas.addEventListener('click', handleGridClick);
-  canvas.addEventListener('mousedown', handleMouseDown);
-  canvas.addEventListener('mouseup', handleMouseUp);
-  canvas.addEventListener('touchstart', handleTouchStart);
-  canvas.addEventListener('touchend', handleTouchEnd);
-  console.log('[GridInput] Click and deep click handlers registered');
-}
-
-/**
- * Update deep click state (à appeler dans la boucle de rendu)
- */
-export function updateDeepClick(): DeepClickState {
-  if (deepClickState.active) {
-    const duration = performance.now() - deepClickState.startTime;
-    
-    // Si on dépasse le seuil et qu'on n'a pas encore fortifié
-    if (duration >= DEEP_CLICK_THRESHOLD_MS) {
-      // Tenter la fortification
-      handleDeepClickComplete();
-    }
-  }
-  
-  return { ...deepClickState };
-}
-
-/**
- * Get current deep click progress (0-1)
- */
-export function getDeepClickProgress(): number {
-  if (!deepClickState.active) return 0;
-  const duration = performance.now() - deepClickState.startTime;
-  return Math.min(1, duration / DEEP_CLICK_THRESHOLD_MS);
+  console.log('[GridInput] Smart Context system initialized');
 }
 
 // =============================================================================
@@ -94,130 +96,77 @@ function handleGridClick(event: MouseEvent): void {
     return;
   }
 
-  console.log(`[GridInput] Clicked cell (${cell.col}, ${cell.row}), owner: ${cell.owner}`);
+  // Déterminer l'action contextuelle
+  const action = getActionFromTarget(cell);
 
-  // Si la cellule est neutre ou ennemie, initier un déploiement
-  if (cell.owner === 'neutral' || cell.owner === 'enemy') {
-    // Vérifier l'énergie disponible (Bloc 4.1)
-    const energy = getEnergy();
-    const DEPLOYMENT_COST = 10;
-
-    if (energy.current < DEPLOYMENT_COST) {
-      console.warn(`[GridInput] Insufficient energy: ${Math.floor(energy.current)}/${DEPLOYMENT_COST}`);
-      showLowPowerFeedback(); // Bloc 4.4
+  if (action.type === 'NONE') {
+    console.log('[GridInput] No action available');
       return;
     }
 
-    // Dépenser l'énergie
-    if (!spendEnergy(DEPLOYMENT_COST)) {
-      console.warn('[GridInput] Failed to spend energy');
-      return;
-    }
-
-    const deploymentId = initiateOutpostDeployment(cell.col, cell.row, 'player');
-    
-    if (deploymentId) {
-      console.log(`[GridInput] Outpost deployment initiated: ${deploymentId} (cost: ${DEPLOYMENT_COST} energy)`);
-    } else {
-      console.warn('[GridInput] Failed to initiate deployment');
-      // Rembourser l'énergie si le déploiement a échoué
-      spendEnergy(-DEPLOYMENT_COST);
-    }
-  } else {
-    console.log('[GridInput] Cannot deploy on owned cell (use deep click for fortify)');
-  }
-}
-
-// =============================================================================
-// DEEP CLICK HANDLERS (Bloc 4.2)
-// =============================================================================
-
-function handleMouseDown(event: MouseEvent): void {
-  const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-  
-  startDeepClick(x, y);
-}
-
-function handleMouseUp(): void {
-  cancelDeepClick();
-}
-
-function handleTouchStart(event: TouchEvent): void {
-  if (event.touches.length > 0) {
-    const rect = (event.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = event.touches[0].clientX - rect.left;
-    const y = event.touches[0].clientY - rect.top;
-    
-    startDeepClick(x, y);
-  }
-}
-
-function handleTouchEnd(): void {
-  cancelDeepClick();
-}
-
-function startDeepClick(x: number, y: number): void {
-  const cell = getCellAtPosition(x, y);
-  
-  if (!cell) return;
-  
-  // Deep click seulement sur cellules alliées non-fortifiées
-  if (cell.owner === 'player' && !cell.isFortified) {
-    deepClickState.active = true;
-    deepClickState.startTime = performance.now();
-    deepClickState.startX = x;
-    deepClickState.startY = y;
-    deepClickState.targetCol = cell.col;
-    deepClickState.targetRow = cell.row;
-    
-    console.log(`[GridInput] Deep click started on (${cell.col}, ${cell.row})`);
-  }
-}
-
-function cancelDeepClick(): void {
-  if (deepClickState.active) {
-    console.log('[GridInput] Deep click cancelled');
-  }
-  deepClickState.active = false;
-}
-
-function handleDeepClickComplete(): void {
-  if (!deepClickState.active) return;
-  
-  const { targetCol, targetRow } = deepClickState;
-  
-  // Vérifier l'énergie
+  // Vérifier l'énergie disponible
   const energy = getEnergy();
-  if (energy.current < FORTIFY_COST) {
-    console.warn(`[GridInput] Insufficient energy for fortify: ${Math.floor(energy.current)}/${FORTIFY_COST}`);
-    showLowPowerFeedback(); // Bloc 4.4
-    cancelDeepClick();
-    return;
-  }
-  
-  // Vérifier qu'il n'y a pas déjà une cellule fortifiée
-  const fortifiedCells = getFortifiedCells();
-  if (fortifiedCells.length > 0) {
-    console.warn('[GridInput] Already have a fortified cell, removing old one');
-    // Retirer l'ancienne fortification
-    for (const cell of fortifiedCells) {
-      unfortifyCell(cell.col, cell.row);
+  if (energy.current < action.cost) {
+    console.warn(`[GridInput] Insufficient energy: ${Math.floor(energy.current)}/${action.cost}`);
+    showLowPowerFeedback();
+      return;
     }
+
+  // Exécuter l'action correspondante
+  let success = false;
+
+  switch (action.type) {
+    case 'SCOUT':
+      // Déploiement d'avant-poste sur cellule neutre
+      if (spendEnergy(action.cost)) {
+    const deploymentId = initiateOutpostDeployment(cell.col, cell.row, 'player');
+    if (deploymentId) {
+          success = true;
+          console.log(`[GridInput] SCOUT: Outpost deployment initiated (cost: ${action.cost} energy)`);
+    } else {
+      // Rembourser l'énergie si le déploiement a échoué
+          spendEnergy(-action.cost);
+          console.warn('[GridInput] SCOUT: Failed to initiate deployment');
+  }
+}
+      break;
+
+    case 'DEFEND':
+      // Fortification de cellule alliée
+      if (spendEnergy(action.cost)) {
+        // Retirer l'ancienne fortification si elle existe
+        const fortifiedCells = getFortifiedCells();
+        for (const fortifiedCell of fortifiedCells) {
+          unfortifyCell(fortifiedCell.col, fortifiedCell.row);
+        }
+        
+        if (fortifyCell(cell.col, cell.row)) {
+          success = true;
+          console.log(`[GridInput] DEFEND: Cell fortified (cost: ${action.cost} energy)`);
+        } else {
+          // Rembourser l'énergie si la fortification a échoué
+          spendEnergy(-action.cost);
+          console.warn('[GridInput] DEFEND: Failed to fortify cell');
+        }
+      }
+      break;
+
+    case 'ATTACK':
+      // Attaque/Sabotage de cellule ennemie
+      if (spendEnergy(action.cost)) {
+        if (attackEnemyCell(cell.col, cell.row)) {
+          success = true;
+          console.log(`[GridInput] ATTACK: Enemy cell attacked (cost: ${action.cost} energy)`);
+        } else {
+          // Rembourser l'énergie si l'attaque a échoué
+          spendEnergy(-action.cost);
+          console.warn('[GridInput] ATTACK: Failed to attack cell');
+        }
+      }
+      break;
   }
   
-  // Dépenser l'énergie
-  if (!spendEnergy(FORTIFY_COST)) {
-    console.warn('[GridInput] Failed to spend energy for fortify');
-    cancelDeepClick();
-    return;
+  if (!success) {
+    console.warn(`[GridInput] Action ${action.type} failed`);
   }
-  
-  // Fortifier la cellule
-  if (fortifyCell(targetCol, targetRow)) {
-    console.log(`[GridInput] Cell (${targetCol}, ${targetRow}) fortified! (cost: ${FORTIFY_COST} energy)`);
-  }
-  
-  cancelDeepClick();
 }

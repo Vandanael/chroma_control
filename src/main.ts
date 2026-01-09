@@ -1,17 +1,15 @@
 /**
  * Chroma Control - Main Entry Point
- * Sprint 0: Game Feel Validation
- *
- * This module initializes:
- * - Canvas (Retina-ready)
- * - Touch input system (duration-based unit detection)
- * - Render engine with debug overlay
+ * Bio-Digital Edition
  */
 
 import { initCanvas } from './render/canvas';
 import { initTouchInput, onTouchEnd, onUnitChange } from './input/touch';
-import { initGridInput } from './input/gridInput';
+import { initUnifiedInput } from './input/unifiedInput';
+import { initSafeAreas } from './utils/safeAreas';
 import { startEngine } from './render/engine';
+import { clearRenderCaches } from './render/optimizedWorldRenderer';
+import { clearEphemeralConnections } from './render/ephemeralConnections';
 import { UnitType } from './types';
 import {
   debugEndMatch,
@@ -21,47 +19,104 @@ import {
   resetScore,
   setGameState,
   startTimer,
+  stopTimer,
+  getGameResult,
 } from './game/state';
 import { setAIEnabled, initAI } from './game/ai';
+import { resetNodeSystem } from './game/nodeManager';
+import { clearAllSyringes } from './render/syringeRenderer';
+import { setPlayerColor } from './game/playerColor';
+import { PlayerColor, getPlayerColor as getPlayerColorFromConstants } from './game/constants';
+import { initOrbAnimation, setOrbHoverColor, triggerOrbZoom } from './render/orbAnimation';
+import { initOrbitView } from './ui/orbitView';
+import { getVictoryMessage, DEFEAT_MESSAGE, getRandomLoadingMessage } from './narrative/lore';
+import { getSelectedColorType } from './game/playerColor';
+import { initVictoryNotification, resetVictoryNotification } from './ui/victoryNotification';
+import { RENDERING_CONFIG, UI_CONFIG } from './config';
+// PROTOTYPE : testNodeTypes désactivé (types simplifiés)
+// import { testNodeTypes } from './game/nodeTypes';
+// PROTOTYPE : Node Type Selector désactivé
+// import { initNodeTypeSelector } from './ui/nodeTypeSelector';
 
 // =============================================================================
 // INITIALIZATION
 // =============================================================================
 
-function init(): void {
-  console.log('[Chroma Control] Initializing Sprint 0...');
+// PROTOTYPE : testNodeTypes désactivé
+// (window as any).testNodeTypes = testNodeTypes;
 
-  // 1. Initialize Canvas (Retina-ready)
+function init(): void {
+  console.log('[Chroma Control] Initializing Bio-Digital Edition...');
+
+  // Initialize Canvas
   const canvasContext = initCanvas('game-canvas');
   console.log(
     `[Canvas] Initialized at ${canvasContext.width}x${canvasContext.height} (DPR: ${canvasContext.dpr})`,
   );
 
-  // 2. Initialize Touch Input
+  // Initialize Input Systems
   initTouchInput(canvasContext.canvas);
-  console.log('[Input] Touch handlers registered');
 
-  // 3. Initialize Grid Input (Bloc 2.2)
-  initGridInput(canvasContext.canvas);
-  console.log('[Input] Grid click handlers registered');
+  // Initialiser le système d'input unifié (PointerEvents)
+  initUnifiedInput(canvasContext.canvas);
+  
+  // Initialiser les safe areas (notch, barres de navigation)
+  initSafeAreas();
+  console.log('[Input] Free-form placement system initialized');
 
-  // 4. Start Render Engine
+  // Start Render Engine
   startEngine(canvasContext);
   console.log('[Engine] Render loop started');
 
-  // 5. UI wiring: START / REPLAY / DEBUG
-  wireUiLayers();
+  // Wire UI Layers (doit être appelé avant setGameState pour que le listener soit enregistré)
+  // Utiliser requestAnimationFrame pour s'assurer que le DOM est prêt
+  requestAnimationFrame(async () => {
+    wireUiLayers();
 
-  // 6. Log initialization complete
-  console.log('[Chroma Control] MACRO GRID + OUTPOST DEPLOYMENT Ready!');
-  console.log('');
-  console.log('=== 400 TACTICAL CELLS ===');
-  console.log('Grid: 25 columns × 16 rows');
-  console.log('HQ: Bottom center (col 12, row 15)');
-  console.log('');
-  console.log('=== CONTROLS ===');
-  console.log('Click on neutral/enemy cell → Deploy outpost (250ms/cell)');
-  console.log('======================');
+    // DÉSACTIVÉ : Ancienne interface Chroma Control (remplacée par design minimaliste)
+    // import('./ui/chromaControlInterface').then(({ initChromaControlInterface }) => {
+    //   initChromaControlInterface();
+    // });
+    
+    // Initialiser l'animation de l'orbe (minimaliste retro-futur)
+    // Attendre que le DOM soit complètement chargé
+    setTimeout(() => {
+      initOrbAnimation('planet-animation-container');
+    }, 100);
+    
+    // Initialiser Orbit View
+    initOrbitView();
+    
+    // Initialiser Victory Notification
+    initVictoryNotification();
+    
+    // Initialiser FLUX UI
+    import('./ui/fluxUI').then(({ initFluxUI }) => {
+      initFluxUI();
+    });
+    
+    // Initialiser Double-Tap Tutorial
+    import('./ui/doubleTapTutorial').then(({ initDoubleTapTutorial }) => {
+      initDoubleTapTutorial();
+    });
+    
+    // PROTOTYPE : Node Type Selector désactivé (nœud unique 'Chroma Node')
+    // initNodeTypeSelector();
+    
+    // Initialiser l'audio (asynchrone, ne bloque pas le rendu)
+    const { initAudio } = await import('./audio/audioManager');
+    initAudio().catch(err => {
+      console.warn('[Audio] Failed to initialize audio:', err);
+    });
+    
+    // Afficher un message de chargement aléatoire dans la console
+    console.log(`%c${getRandomLoadingMessage()}`, 'color: #00F3FF; font-size: 12px; font-family: monospace;');
+    
+    // État initial : START (après avoir enregistré le listener)
+    setGameState('START');
+    
+    console.log('[Chroma Control] Bio-Digital Edition Ready!');
+  });
 }
 
 // =============================================================================
@@ -69,25 +124,187 @@ function init(): void {
 // =============================================================================
 
 function wireUiLayers(): void {
+  console.log('[wireUiLayers] Starting UI wiring...');
   const body = document.body;
   const startScreen = document.getElementById('start-screen');
+  const gameOverScreen = document.getElementById('game-over-screen');
   const replayScreen = document.getElementById('replay-screen');
   const startButton = document.getElementById('btn-initiate-signal');
+  const rebootButton = document.getElementById('btn-reboot-system');
   const replayButton = document.getElementById('btn-replay-signal');
   const debugEndButton = document.getElementById('btn-debug-end');
   const replayScoreEl = document.getElementById('replay-score');
+  const gameOverTitleEl = document.getElementById('game-over-title');
+  const gameOverMessageEl = document.getElementById('game-over-message');
+  
+  // Boutons de sélection de couleur
+  const colorButtons = document.querySelectorAll('.color-button');
+  const cyanButton = document.getElementById('btn-color-cyan');
+  
+  console.log('[wireUiLayers] Elements found:', {
+    startScreen: !!startScreen,
+    startButton: !!startButton,
+    colorButtons: colorButtons.length,
+    cyanButton: !!cyanButton,
+  });
+  
+  // Fonction pour mettre à jour le bouton START et le titre avec la couleur sélectionnée (minimaliste)
+  function updateStartButtonColor(color: PlayerColor): void {
+    if (!startButton) return;
+    const colorValue = color === 'CYAN' ? '#00F3FF' : color === 'GREEN' ? '#00FF88' : '#FFAA00';
+    const button = startButton as HTMLElement;
+    const titleEl = document.getElementById('start-title');
+    
+    // Mettre à jour le bouton START (pas de glow)
+    button.style.borderColor = colorValue;
+    button.style.color = colorValue;
+    button.style.boxShadow = 'none';
+    
+    // Hover : fond rempli à 10%
+    button.onmouseenter = () => {
+      button.style.background = `${colorValue}1A`; // 10% opacité
+    };
+    button.onmouseleave = () => {
+      button.style.background = 'transparent';
+    };
+    
+    // Mettre à jour le titre (pas de glow, pas d'ombre)
+    if (titleEl) {
+      titleEl.style.color = colorValue;
+      titleEl.style.textShadow = 'none';
+    }
+    
+    // Mettre à jour le gradient radial du fond (3-5% opacité max)
+    const overlay = startScreen as HTMLElement;
+    if (overlay) {
+      const r = parseInt(colorValue.slice(1, 3), 16);
+      const g = parseInt(colorValue.slice(3, 5), 16);
+      const b = parseInt(colorValue.slice(5, 7), 16);
+      overlay.style.backgroundImage = `
+        radial-gradient(circle at center, rgba(${r}, ${g}, ${b}, 0.04) 0%, transparent 70%),
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E")
+      `;
+    }
+  }
+  
+  // Sélection de couleur
+  colorButtons.forEach(button => {
+    const buttonEl = button as HTMLElement;
+    const color = buttonEl.dataset.color as PlayerColor;
+    
+    // Hover : changer la couleur de l'orbe
+    button.addEventListener('mouseenter', () => {
+      const colorValue = getPlayerColorFromConstants(color);
+      setOrbHoverColor(colorValue);
+    });
+    
+    button.addEventListener('mouseleave', () => {
+      setOrbHoverColor(null);
+    });
+    
+    // Click : sélectionner la couleur
+    button.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Sanitisation : valider la couleur avant traitement (protection XSS)
+      const validColors: PlayerColor[] = ['CYAN', 'GREEN', 'AMBER'];
+      if (!validColors.includes(color as PlayerColor)) {
+        console.warn('[Security] Invalid color selection attempted:', color);
+        return;
+      }
+      
+      console.log('[StartScreen] Color button clicked:', color);
+      setPlayerColor(color);
+      
+      // Mettre à jour l'état visuel des boutons
+      colorButtons.forEach(btn => btn.classList.remove('selected'));
+      button.classList.add('selected');
+      
+      // Mettre à jour le bouton START et l'orbe
+      updateStartButtonColor(color);
+      const colorValue = getPlayerColorFromConstants(color);
+      setOrbHoverColor(colorValue);
+    });
+  });
+  
+  // Sélectionner CYAN par défaut
+  if (cyanButton) {
+    cyanButton.classList.add('selected');
+    updateStartButtonColor('CYAN');
+    // Mettre à jour le gradient radial du fond au chargement
+    const overlay = startScreen as HTMLElement;
+    if (overlay) {
+      overlay.style.backgroundImage = `
+        radial-gradient(circle at center, rgba(0, 243, 255, 0.04) 0%, transparent 70%),
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E")
+      `;
+    }
+    console.log('[StartScreen] Default color (CYAN) selected');
+  } else {
+    console.warn('[StartScreen] Cyan button not found!');
+  }
+  
+  // Vérifier que les boutons sont bien trouvés
+  console.log('[StartScreen] Color buttons found:', colorButtons.length);
+  console.log('[StartScreen] Start button found:', !!startButton);
 
   // Reflect game state in DOM (data attribute + visibility)
   onGameStateChange((state, score) => {
     body.setAttribute('data-game-state', state);
 
+    // Afficher/masquer les écrans
     if (startScreen) {
       (startScreen as HTMLElement).style.display =
         state === 'START' ? 'flex' : 'none';
     }
+    if (gameOverScreen) {
+      (gameOverScreen as HTMLElement).style.display =
+        state === 'GAME_OVER' ? 'flex' : 'none';
+    }
     if (replayScreen) {
       (replayScreen as HTMLElement).style.display =
         state === 'REPLAY' ? 'flex' : 'none';
+    }
+
+    // Mettre à jour l'écran Game Over selon victoire/défaite
+    if (state === 'GAME_OVER') {
+      // Obtenir les dimensions du canvas pour calcul de saturation
+      const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+      const canvasWidth = canvas?.width || 1920;
+      const canvasHeight = canvas?.height || 1080;
+      const result = getGameResult(canvasWidth, canvasHeight);
+      
+      if (gameOverTitleEl) {
+        if (result === 'victory') {
+          const chroma = getSelectedColorType();
+          const victory = getVictoryMessage(chroma);
+          gameOverTitleEl.textContent = victory.title;
+          gameOverTitleEl.style.color = victory.color;
+        } else {
+          gameOverTitleEl.textContent = DEFEAT_MESSAGE.title;
+          gameOverTitleEl.style.color = DEFEAT_MESSAGE.color;
+        }
+      }
+      
+      if (gameOverMessageEl) {
+        // Sanitisation : utiliser textContent au lieu de innerHTML (protection XSS)
+        // textContent échappe automatiquement le HTML
+        if (result === 'victory') {
+          const chroma = getSelectedColorType();
+          const victory = getVictoryMessage(chroma);
+          // Supprimer toute balise HTML potentielle (double protection)
+          gameOverMessageEl.textContent = victory.message.replace(/<[^>]*>/g, '');
+          gameOverMessageEl.style.color = victory.color;
+        } else {
+          gameOverMessageEl.textContent = DEFEAT_MESSAGE.message.replace(/<[^>]*>/g, '');
+          gameOverMessageEl.style.color = DEFEAT_MESSAGE.color;
+        }
+      }
+      
+      if (rebootButton) {
+        rebootButton.className = result === 'victory' ? 'cta-button' : 'cta-button defeat';
+      }
     }
 
     if (replayScoreEl) {
@@ -96,22 +313,64 @@ function wireUiLayers(): void {
     }
   });
 
-  // START → PLAYING
-  startButton?.addEventListener('click', () => {
+  // START → PLAYING avec transition "DIVE" (fondu 0.5s)
+  startButton?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[StartScreen] START button clicked');
+    if (!startScreen) {
+      console.warn('[StartScreen] Start screen element not found!');
+      return;
+    }
+    
+    // Déclencher l'animation de zoom de l'orbe
+    triggerOrbZoom();
+    
+    // Transition de fondu "DIVE"
+    startScreen.classList.add('fade-out');
+    console.log('[StartScreen] Fade-out transition started');
+    
+    // Attendre la fin de la transition avant de démarrer le jeu
+    setTimeout(() => {
+      console.log('[StartScreen] Starting game...');
+      // Initialiser le Drop-Pod avec la couleur choisie (déjà fait via setPlayerColor)
+      resetScore();
+      resetVictoryNotification();
+      initAI();
+      setAIEnabled(true);
+      startTimer();
+      setGameState('PLAYING');
+    }, RENDERING_CONFIG.diveTransitionDuration);
+  });
+  
+  if (!startButton) {
+    console.error('[StartScreen] START button not found in DOM!');
+  }
+
+  // GAME OVER → START (reboot)
+  rebootButton?.addEventListener('click', () => {
     resetScore();
-    initAI();        // Bloc 5.2
-    setAIEnabled(true);
-    startTimer();    // Bloc 5.3
-    setGameState('PLAYING');
+    resetNodeSystem();
+    resetVictoryNotification();
+    clearAllSyringes();
+    clearRenderCaches();
+    clearEphemeralConnections();
+    setAIEnabled(false);
+    stopTimer();
+    setGameState('START');
   });
 
-  // REPLAY → nouveau RUN
+  // REPLAY → START (retour à l'écran de démarrage)
   replayButton?.addEventListener('click', () => {
     resetScore();
-    initAI();
-    setAIEnabled(true);
-    startTimer();
-    setGameState('PLAYING');
+    resetNodeSystem();
+    resetVictoryNotification();
+    clearAllSyringes();
+    clearRenderCaches();
+    clearEphemeralConnections();
+    setAIEnabled(false);
+    stopTimer();
+    setGameState('START');
   });
 
   // Bouton DEBUG pour forcer la fin de match
@@ -135,31 +394,23 @@ function wireUiLayers(): void {
       incrementScore(state.detectedUnit);
     }
 
-    // TODO: Effet visuel "released" (sera réimplémenté avec Voronoi)
-    // addReleasedAnimation(state.x, state.y, state.detectedUnit);
-
-    // Règle simple de fin de match pour Sprint 0 :
-    // après 10 interactions productives, on bascule en REPLAY
     const snapshot = getScore();
     const interactions =
       snapshot.taps + snapshot.defenders + snapshot.attackers;
     if (
-      interactions >= 10 &&
+      interactions >= UI_CONFIG.minInteractionsForReplay &&
       document.body.getAttribute('data-game-state') === 'PLAYING'
     ) {
       setGameState('REPLAY');
     }
   });
 
-  // Log de changement d’unité (pour ressenti)
+  // Log de changement d'unité (pour ressenti)
   onUnitChange((unit: UnitType, duration: number) => {
     console.log(
       `[Unit] Changed to ${unit.toUpperCase()} at ${duration.toFixed(0)}ms`,
     );
   });
-
-  // État initial : START
-  setGameState('START');
 }
 
 // =============================================================================
