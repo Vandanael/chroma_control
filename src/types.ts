@@ -126,6 +126,24 @@ export interface NexusLink {
 }
 
 // =============================================================================
+// TRIANGLES (Sprint 5+)
+// =============================================================================
+
+export interface Triangle {
+  id: string;
+  nexusIds: [string, string, string]; // Les 3 IDs des nexus formant le triangle
+  owner: NexusOwner;
+  /**
+   * Timestamp de formation (ms, via performance.now()) pour l’animation de hachures.
+   */
+  createdAt: number;
+  /**
+   * Durée de l’animation de complétion (ms).
+   */
+  animationDuration: number;
+}
+
+// =============================================================================
 // COLOR PALETTE - Pastel NASA-Punk
 // =============================================================================
 

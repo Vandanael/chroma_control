@@ -3,9 +3,9 @@
  * Handles the main render loop, FPS tracking, and debug display
  */
 
-import { CanvasContext, DebugState, TouchState, UnitType, COLORS, Nexus, NexusLink } from '../types';
+import { CanvasContext, DebugState, TouchState, UnitType, COLORS, Nexus, NexusLink, Triangle } from '../types';
 import { clearCanvas, drawGrid } from './canvas';
-import { drawUnitIndicator, drawProgressArc, drawCoordinates, drawCoordinatesWithLabel, getUnitColor, easeOutCubic } from './effects';
+import { drawUnitIndicator, drawProgressArc, drawCoordinates, drawCoordinatesWithLabel, getUnitColor, easeOutCubic, drawTriangleHatching } from './effects';
 import { updateTouchState, getInputLatency, getUnitProgress } from '../input/touch';
 import { addNexusPoints, getEnergy, getGameState, getScore, regenEnergy, spendEnergy } from '../game/state';
 
@@ -71,6 +71,12 @@ const MAX_LINKS_PER_NEXUS = 3;
 
 let links: NexusLink[] = [];
 let selectedNexusId: string | null = null;
+
+// Triangles (Sprint 5)
+const TRIANGLE_ANIMATION_DURATION_MS = 600;
+const TRIANGLE_SCORE_MULTIPLIER = 5; // ×5 le score des nexus inclus
+
+let triangles: Triangle[] = [];
 
 // =============================================================================
 // DEBUG OVERLAY UPDATE
@@ -218,11 +224,111 @@ function renderLinks(
 }
 
 // =============================================================================
+// TRIANGLES (Sprint 5)
+// =============================================================================
+
+/**
+ * Détecte les triangles formés par 3 nexus liés.
+ * Un triangle est formé si 3 nexus du même propriétaire sont tous liés entre eux.
+ */
+function detectTriangles(): void {
+  const newTriangles: Triangle[] = [];
+
+  // Pour chaque combinaison de 3 nexus
+  for (let i = 0; i < nexusList.length; i++) {
+    for (let j = i + 1; j < nexusList.length; j++) {
+      for (let k = j + 1; k < nexusList.length; k++) {
+        const a = nexusList[i];
+        const b = nexusList[j];
+        const c = nexusList[k];
+
+        // Tous les 3 doivent être possédés par le même propriétaire (joueur ou ennemi)
+        if (a.owner === 'neutral' || b.owner === 'neutral' || c.owner === 'neutral') continue;
+        if (a.owner !== b.owner || b.owner !== c.owner) continue;
+
+        // Vérifier que les 3 liens existent
+        const hasAB = links.some(
+          (l) =>
+            (l.fromId === a.id && l.toId === b.id) ||
+            (l.fromId === b.id && l.toId === a.id),
+        );
+        const hasBC = links.some(
+          (l) =>
+            (l.fromId === b.id && l.toId === c.id) ||
+            (l.fromId === c.id && l.toId === b.id),
+        );
+        const hasCA = links.some(
+          (l) =>
+            (l.fromId === c.id && l.toId === a.id) ||
+            (l.fromId === a.id && l.toId === c.id),
+        );
+
+        if (!hasAB || !hasBC || !hasCA) continue;
+
+        // Vérifier si ce triangle existe déjà
+        const triangleId = [a.id, b.id, c.id].sort().join('-');
+        const exists = triangles.some((t) => t.id === triangleId);
+        if (exists) continue;
+
+        // Nouveau triangle détecté !
+        newTriangles.push({
+          id: triangleId,
+          nexusIds: [a.id, b.id, c.id],
+          owner: a.owner,
+          createdAt: performance.now(),
+          animationDuration: TRIANGLE_ANIMATION_DURATION_MS,
+        });
+      }
+    }
+  }
+
+  // Ajouter les nouveaux triangles
+  triangles.push(...newTriangles);
+}
+
+/**
+ * Rendu des triangles avec hachures.
+ */
+function renderTriangles(
+  ctx: CanvasRenderingContext2D,
+  timestamp: number,
+): void {
+  for (const triangle of triangles) {
+    const a = nexusList.find((n) => n.id === triangle.nexusIds[0]);
+    const b = nexusList.find((n) => n.id === triangle.nexusIds[1]);
+    const c = nexusList.find((n) => n.id === triangle.nexusIds[2]);
+
+    if (!a || !b || !c) continue;
+
+    // Progression de l’animation (hachures qui apparaissent progressivement)
+    const elapsed = timestamp - triangle.createdAt;
+    const progress = Math.min(1, elapsed / triangle.animationDuration);
+
+    // Dessiner les hachures
+    if (triangle.owner === 'player' || triangle.owner === 'enemy') {
+      drawTriangleHatching(
+        ctx,
+        a.x,
+        a.y,
+        b.x,
+        b.y,
+        c.x,
+        c.y,
+        triangle.owner,
+        progress,
+        8, // spacing 8px
+      );
+    }
+  }
+}
+
+// =============================================================================
 // MAIN RENDER LOOP
 // =============================================================================
 
 let animationFrameId: number | null = null;
 let canvasContext: CanvasContext | null = null;
+let lastGameState: string = 'START';
 
 function ensureNexusLayout(width: number, height: number): void {
   if (nexusList.length === 0) {
@@ -488,6 +594,14 @@ function render(timestamp: number): void {
 
   const gameState = getGameState();
 
+  // Réinitialisation des liens et triangles au démarrage d'une nouvelle partie
+  if (gameState === 'PLAYING' && (lastGameState === 'START' || lastGameState === 'REPLAY')) {
+    links = [];
+    triangles = [];
+    selectedNexusId = null;
+  }
+  lastGameState = gameState;
+
   // Mise à jour de l'IA ennemie (Sprint 3)
   if (gameState !== 'PLAYING') {
     enemyAgent.targetId = null;
@@ -540,13 +654,41 @@ function render(timestamp: number): void {
     }
   }
 
-  // Score = +1 point/seconde par nexus possédé
-  if (gameState === 'PLAYING' && deltaSeconds > 0 && ownedCount > 0) {
-    addNexusPoints(deltaSeconds * ownedCount);
+  // Détection de triangles (Sprint 5) - après mise à jour des liens
+  if (gameState === 'PLAYING') {
+    detectTriangles();
   }
+
+  // Triangles (Sprint 5) - rendu avant les liens pour que les hachures soient en arrière-plan
+  renderTriangles(ctx, timestamp);
 
   // Liens (Sprint 4)
   renderLinks(ctx, timestamp);
+
+  // Score = +1 point/seconde par nexus possédé + bonus triangles (×5)
+  if (gameState === 'PLAYING' && deltaSeconds > 0) {
+    let baseScore = ownedCount;
+    
+    // Bonus triangles : ×5 le score des nexus inclus dans les triangles
+    const triangleNexusIds = new Set<string>();
+    for (const triangle of triangles) {
+      if (triangle.owner === 'player') {
+        triangle.nexusIds.forEach((id) => triangleNexusIds.add(id));
+      }
+    }
+    const triangleNexusCount = Array.from(triangleNexusIds).filter(
+      (id) => nexusList.find((n) => n.id === id)?.owner === 'player',
+    ).length;
+    
+    // Score = nexus normaux + (nexus dans triangles × 5)
+    const normalNexusCount = ownedCount - triangleNexusCount;
+    const triangleBonus = triangleNexusCount * TRIANGLE_SCORE_MULTIPLIER;
+    baseScore = normalNexusCount + triangleBonus;
+    
+    if (baseScore > 0) {
+      addNexusPoints(deltaSeconds * baseScore);
+    }
+  }
 
   // Énergie (Sprint 4)
   if (gameState === 'PLAYING' && deltaSeconds > 0) {

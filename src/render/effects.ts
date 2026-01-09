@@ -295,3 +295,82 @@ export function getUnitColor(unitType: UnitType): string {
     default: return COLORS.neutral;
   }
 }
+
+// =============================================================================
+// TRIANGLES - HACHURES (Sprint 5)
+// =============================================================================
+
+/**
+ * Dessine des hachures diagonales dans un triangle.
+ * @param ctx - Contexte canvas
+ * @param x1, y1, x2, y2, x3, y3 - Coordonnées des 3 sommets du triangle
+ * @param owner - Propriétaire (player = 45°, enemy = -45°)
+ * @param progress - Progression de l’animation 0-1 (hachures qui apparaissent progressivement)
+ * @param spacing - Espacement entre les lignes de hachures (px)
+ */
+export function drawTriangleHatching(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  x3: number,
+  y3: number,
+  owner: 'player' | 'enemy',
+  progress: number,
+  spacing: number = 8
+): void {
+  ctx.save();
+
+  // Clip au triangle
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.lineTo(x3, y3);
+  ctx.closePath();
+  ctx.clip();
+
+  // Angle des hachures : 45° pour joueur, -45° pour ennemi
+  const angle = owner === 'player' ? Math.PI / 4 : -Math.PI / 4;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+
+  // Bounding box du triangle
+  const minX = Math.min(x1, x2, x3);
+  const maxX = Math.max(x1, x2, x3);
+  const minY = Math.min(y1, y2, y3);
+  const maxY = Math.max(y1, y2, y3);
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const diagonal = Math.sqrt(width * width + height * height);
+
+  // Couleur des hachures selon le propriétaire
+  ctx.strokeStyle = owner === 'player' ? COLORS.player : COLORS.enemy;
+  ctx.lineWidth = 1.5;
+
+  // Nombre de lignes de hachures à dessiner
+  const totalLines = Math.ceil(diagonal / spacing);
+  const linesToDraw = Math.floor(totalLines * progress);
+
+  // Dessiner les hachures progressivement
+  for (let i = 0; i < linesToDraw; i++) {
+    const offset = i * spacing - diagonal / 2;
+
+    // Point de départ et d'arrivée de la ligne de hachure
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const startX = centerX + offset * cos - diagonal * sin;
+    const startY = centerY + offset * sin + diagonal * cos;
+    const endX = centerX + offset * cos + diagonal * sin;
+    const endY = centerY + offset * sin - diagonal * cos;
+
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
