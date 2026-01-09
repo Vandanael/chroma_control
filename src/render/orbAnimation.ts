@@ -67,12 +67,12 @@ export function initOrbAnimation(containerId: string): void {
 
   // Créer le canvas
   canvas = document.createElement('canvas');
-  canvas.width = 160; // Taille pour orbe 60-80px + marge
-  canvas.height = 160;
+  canvas.width = 320; // CORRECTION : Taille doublée (160 → 320) pour orbe plus grande
+  canvas.height = 320;
   canvas.style.display = 'block';
   canvas.style.margin = '0 auto';
   canvas.style.pointerEvents = 'none'; // Ne pas bloquer les clics
-  canvas.style.position = 'relative';
+  canvas.style.position = 'relative'; // Position relative dans le container
   canvas.style.zIndex = '1'; // Au-dessus du fond mais sous les boutons
   
   ctx = canvas.getContext('2d', { alpha: true });
@@ -184,7 +184,7 @@ function animate(timestamp: number): void {
     ctx.scale(easedZoom, easedZoom);
   }
   
-  const baseRadius = 35; // Rayon de base de l'orbe (~70px de diamètre, dans la fourchette 60-80px)
+  const baseRadius = 70; // CORRECTION : Rayon doublé (35 → 70) pour orbe ~140px de diamètre (au moins 2x plus grande)
   
   // COUCHE 1 : Respiration organique (contour déformé)
   drawBreathingOrb(ctx, currentColor, baseRadius, breathingPhase);

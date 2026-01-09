@@ -26,11 +26,11 @@ import { setAIEnabled, initAI } from './game/ai';
 import { resetNodeSystem } from './game/nodeManager';
 import { clearAllSyringes } from './render/syringeRenderer';
 import { setPlayerColor } from './game/playerColor';
-import { PlayerColor, getPlayerColor as getPlayerColorFromConstants } from './game/constants';
+import { PlayerColor, getPlayerColor as getPlayerColorFromConstants, COLORS } from './game/constants';
 import { initOrbAnimation, setOrbHoverColor, triggerOrbZoom } from './render/orbAnimation';
 import { initOrbitView } from './ui/orbitView';
 import { getVictoryMessage, DEFEAT_MESSAGE, getRandomLoadingMessage } from './narrative/lore';
-import { getSelectedColorType } from './game/playerColor';
+import { getSelectedColorType, getPlayerColorValue } from './game/playerColor';
 import { initVictoryNotification, resetVictoryNotification } from './ui/victoryNotification';
 import { RENDERING_CONFIG, UI_CONFIG } from './config';
 // PROTOTYPE : testNodeTypes désactivé (types simplifiés)
@@ -95,10 +95,10 @@ function init(): void {
       initFluxUI();
     });
     
-    // Initialiser Double-Tap Tutorial
-    import('./ui/doubleTapTutorial').then(({ initDoubleTapTutorial }) => {
-      initDoubleTapTutorial();
-    });
+    // DÉSACTIVÉ : Double-Tap Tutorial (sera réactivé plus tard quand mieux conçu)
+    // import('./ui/doubleTapTutorial').then(({ initDoubleTapTutorial }) => {
+    //   initDoubleTapTutorial();
+    // });
     
     // PROTOTYPE : Node Type Selector désactivé (nœud unique 'Chroma Node')
     // initNodeTypeSelector();
@@ -132,10 +132,15 @@ function wireUiLayers(): void {
   const startButton = document.getElementById('btn-initiate-signal');
   const rebootButton = document.getElementById('btn-reboot-system');
   const replayButton = document.getElementById('btn-replay-signal');
+  const replayGameButton = document.getElementById('btn-replay-game');
+  const backToMenuButton = document.getElementById('btn-back-to-menu');
   const debugEndButton = document.getElementById('btn-debug-end');
   const replayScoreEl = document.getElementById('replay-score');
   const gameOverTitleEl = document.getElementById('game-over-title');
   const gameOverMessageEl = document.getElementById('game-over-message');
+  const statScoreEl = document.getElementById('stat-score');
+  const statDurationEl = document.getElementById('stat-duration');
+  const statNodesEl = document.getElementById('stat-nodes');
   
   // Boutons de sélection de couleur
   const colorButtons = document.querySelectorAll('.color-button');
@@ -287,25 +292,22 @@ function wireUiLayers(): void {
       const canvasHeight = canvas?.height || 1080;
       const result = getGameResult(canvasWidth, canvasHeight);
       
+      // Mettre à jour le titre
       if (gameOverTitleEl) {
         if (result === 'victory') {
-          const chroma = getSelectedColorType();
-          const victory = getVictoryMessage(chroma);
-          gameOverTitleEl.textContent = victory.title;
-          gameOverTitleEl.style.color = victory.color;
+          gameOverTitleEl.textContent = 'VICTOIRE';
+          gameOverTitleEl.style.color = getPlayerColorValue();
         } else {
-          gameOverTitleEl.textContent = DEFEAT_MESSAGE.title;
-          gameOverTitleEl.style.color = DEFEAT_MESSAGE.color;
+          gameOverTitleEl.textContent = 'DÉFAITE';
+          gameOverTitleEl.style.color = COLORS.ENEMY;
         }
       }
       
+      // Mettre à jour le message
       if (gameOverMessageEl) {
-        // Sanitisation : utiliser textContent au lieu de innerHTML (protection XSS)
-        // textContent échappe automatiquement le HTML
         if (result === 'victory') {
           const chroma = getSelectedColorType();
           const victory = getVictoryMessage(chroma);
-          // Supprimer toute balise HTML potentielle (double protection)
           gameOverMessageEl.textContent = victory.message.replace(/<[^>]*>/g, '');
           gameOverMessageEl.style.color = victory.color;
         } else {
@@ -314,8 +316,50 @@ function wireUiLayers(): void {
         }
       }
       
-      if (rebootButton) {
-        rebootButton.className = result === 'victory' ? 'cta-button' : 'cta-button defeat';
+      // Mettre à jour les stats
+      import('./game/state').then(({ getElapsedTimeFormatted, getScore }) => {
+        import('./game/territorySystem').then(({ calculateTerritoryPercentage }) => {
+          import('./game/nodeManager').then(({ getNodesByOwner }) => {
+            const elapsed = getElapsedTimeFormatted();
+            const gameScore = getScore();
+            const territory = calculateTerritoryPercentage(canvasWidth, canvasHeight);
+            const playerNodes = getNodesByOwner('player');
+            
+            // Score (% territoire)
+            if (statScoreEl) {
+              statScoreEl.textContent = `${Math.round(territory.player)}%`;
+            }
+            
+            // Durée
+            if (statDurationEl) {
+              statDurationEl.textContent = `${elapsed.minutes}:${elapsed.seconds.toString().padStart(2, '0')}`;
+            }
+            
+            // Nœuds placés
+            if (statNodesEl) {
+              statNodesEl.textContent = `${playerNodes.length}`;
+            }
+          });
+        });
+      });
+      
+      // Mettre à jour les boutons
+      if (replayGameButton) {
+        const colorValue = result === 'victory' ? getPlayerColorValue() : COLORS.ENEMY;
+        replayGameButton.style.borderColor = colorValue;
+        replayGameButton.style.color = colorValue;
+      }
+      
+      if (backToMenuButton) {
+        backToMenuButton.style.borderColor = '#888888';
+        backToMenuButton.style.color = '#888888';
+      }
+      
+      // Fade out audio doux en cas de défaite
+      if (result === 'defeat') {
+        import('./audio/audioManager').then(({ fadeOutAudio }) => {
+          fadeOutAudio(1.0); // Fade out sur 1 seconde
+        });
       }
     }
 
@@ -359,7 +403,39 @@ function wireUiLayers(): void {
     console.error('[StartScreen] START button not found in DOM!');
   }
 
-  // GAME OVER → START (reboot)
+  // GAME OVER → REJOUER (nouveau bouton REJOUER)
+  replayGameButton?.addEventListener('click', () => {
+    resetScore();
+    resetNodeSystem();
+    resetVictoryNotification();
+    clearAllSyringes();
+    clearRenderCaches();
+    clearEphemeralConnections();
+    setAIEnabled(false);
+    stopTimer();
+    // Relancer directement une nouvelle partie
+    setTimeout(() => {
+      initAI();
+      setAIEnabled(true);
+      startTimer();
+      setGameState('PLAYING');
+    }, 100);
+  });
+  
+  // GAME OVER → MENU (nouveau bouton MENU)
+  backToMenuButton?.addEventListener('click', () => {
+    resetScore();
+    resetNodeSystem();
+    resetVictoryNotification();
+    clearAllSyringes();
+    clearRenderCaches();
+    clearEphemeralConnections();
+    setAIEnabled(false);
+    stopTimer();
+    setGameState('START');
+  });
+  
+  // Legacy: GAME OVER → START (reboot) - gardé pour compatibilité
   rebootButton?.addEventListener('click', () => {
     resetScore();
     resetNodeSystem();

@@ -256,6 +256,25 @@ export function getTimer(): { remaining: number; minutes: number; seconds: numbe
   return { remaining: timer.remaining, minutes, seconds };
 }
 
+/**
+ * Obtient le temps écoulé depuis le début de la partie (en secondes)
+ */
+export function getElapsedTime(): number {
+  if (!timer.enabled || timer.startTime === 0) return 0;
+  const elapsed = (performance.now() - timer.startTime) / 1000;
+  return Math.max(0, elapsed);
+}
+
+/**
+ * Obtient le temps écoulé formaté (minutes:secondes)
+ */
+export function getElapsedTimeFormatted(): { minutes: number; seconds: number } {
+  const elapsed = getElapsedTime();
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = Math.floor(elapsed % 60);
+  return { minutes, seconds };
+}
+
 // =============================================================================
 // SCORE CALCULATION
 // =============================================================================

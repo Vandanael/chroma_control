@@ -77,12 +77,15 @@ export function updateAI(): void {
     return;
   }
 
-  // Délai adaptatif selon la saturation du joueur
+  // Délai adaptatif selon la saturation du joueur et le temps écoulé
   const playerSaturation = canvasWidth > 0 && canvasHeight > 0
     ? calculateSaturation('player', canvasWidth, canvasHeight)
     : 0;
   
-  const adaptiveDelay = calculateAIActionDelay(playerSaturation);
+  // CORRECTION : Calculer le temps écoulé pour le scaling de difficulté
+  const elapsedSeconds = (now - aiStartTime) / 1000;
+  
+  const adaptiveDelay = calculateAIActionDelay(playerSaturation, elapsedSeconds);
   const timeSinceLastAction = now - lastThinkTime;
   
   if (timeSinceLastAction < adaptiveDelay) {

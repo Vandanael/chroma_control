@@ -1,6 +1,6 @@
 /**
- * Border Sparkles - Particules de scintillement sur les frontières de collision
- * Intensité proportionnelle à la pression : plus de particules, plus grosses et lumineuses sur fronts actifs
+ * Border Sparkles - Particules orbitales sur les frontières
+ * CORRECTION VISUELLE : Les particules orbitent le long de la ligne de frontière, pas un nuage chaotique
  */
 
 import { type GameNode, getAllNodes, getNodesByOwner } from '../game/nodeManager';
@@ -12,28 +12,31 @@ import { COLORS } from '../game/constants';
 // CONSTANTS
 // =============================================================================
 
-const SPARKLE_LIFETIME = 0.6; // 600ms (légèrement plus long)
-const BASE_SPAWN_RATE = 0.3; // Taux de base
-const MAX_SPAWN_RATE = 1.5; // Taux max sous pression
-const BASE_SPEED = 20;
-const MAX_SPEED = 35; // Plus rapide sous pression
-const BASE_SIZE = 1;
-const MAX_SIZE = 3; // Plus grosses sous pression
+const SPARKLE_LIFETIME = 2.0; // 2 secondes (plus long pour suivre la frontière)
+const BASE_SPAWN_RATE = 0.15; // CORRECTION : Réduit de 50% (0.3 → 0.15)
+const MAX_SPAWN_RATE = 0.75; // CORRECTION : Réduit de 50% (1.5 → 0.75)
+const BASE_SPEED = 30; // Vitesse le long de la frontière
+const MAX_SPEED = 60; // Plus rapide sous pression
+const PARTICLE_SIZE = 4; // CORRECTION : Taille uniforme 4-5px
+const PARTICLE_OPACITY = 0.7; // 60-80% opacité
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 interface Sparkle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+  // Position sur la frontière (0.0 à 1.0 le long du segment)
+  position: number;
+  // Segment de frontière auquel appartient cette particule
+  segmentIndex: number;
+  // Direction : 1 = sens horaire, -1 = sens anti-horaire
+  direction: number;
+  // Vitesse le long de la frontière
+  speed: number;
   life: number;
   maxLife: number;
-  size: number; // Taille de la particule
-  brightness: number; // Luminosité (0.0 à 1.0)
-  color: string; // Couleur (joueur ou blanc selon force ratio)
+  size: number;
+  color: string;
 }
 
 // =============================================================================
@@ -41,82 +44,94 @@ interface Sparkle {
 // =============================================================================
 
 const activeSparkles: Sparkle[] = [];
+let cachedSegments: BorderSegment[] = []; // Cache des segments pour calculer positions
 
 // =============================================================================
 // PUBLIC API
 // =============================================================================
 
 /**
- * Met à jour les particules de scintillement avec intensité selon la pression
+ * Met à jour les particules orbitales le long des frontières
+ * CORRECTION : Les particules suivent la ligne de frontière, pas un nuage chaotique
  */
 export function updateBorderSparkles(deltaSeconds: number): void {
   const borderSegments = calculateBorderSegments();
+  cachedSegments = borderSegments; // Mettre en cache pour le rendu
   const playerColor = getPlayerColorValue();
   
   // Spawner des particules selon la pression de chaque segment
-  for (const segment of borderSegments) {
-    // Taux de spawn proportionnel à la pression
+  for (let segIndex = 0; segIndex < borderSegments.length; segIndex++) {
+    const segment = borderSegments[segIndex];
+    
+    // CORRECTION : Taux de spawn réduit de 50%
     const spawnRate = BASE_SPAWN_RATE + (MAX_SPAWN_RATE - BASE_SPAWN_RATE) * segment.pressure;
     
     // Probabilité de spawn multipliée par la pression
     if (Math.random() < spawnRate * deltaSeconds * 60 * segment.pressure) {
-      // Position sur la frontière avec variation
-      const angle = Math.random() * Math.PI * 2;
-      const offset = (Math.random() - 0.5) * 40; // Variation de position
-      const sparkleX = segment.x + Math.cos(angle) * offset;
-      const sparkleY = segment.y + Math.sin(angle) * offset;
+      // Position initiale aléatoire le long de la frontière (0.0 à 1.0)
+      const initialPosition = Math.random();
       
-      // Direction perpendiculaire à la frontière
-      const perpAngle = angle + Math.PI / 2 + (Math.random() - 0.5) * 0.8;
-      const speed = BASE_SPEED + (MAX_SPEED - BASE_SPEED) * segment.pressure + Math.random() * 10;
+      // Direction alternée : certaines vont dans un sens, d'autres dans l'autre
+      const direction = Math.random() < 0.5 ? 1 : -1;
       
-      // Taille et luminosité selon la pression
-      const size = BASE_SIZE + (MAX_SIZE - BASE_SIZE) * segment.pressure;
-      const brightness = 0.7 + 0.3 * segment.pressure; // 0.7 à 1.0
+      // Vitesse selon la pression (plus rapide si frontière sous pression)
+      const speed = BASE_SPEED + (MAX_SPEED - BASE_SPEED) * segment.pressure;
       
-      // Couleur selon le rapport de force
-      // Force ratio > 0 = on gagne (couleur joueur)
-      // Force ratio < 0 = on perd (blanc/neutre)
-      // Force ratio ≈ 0 = équilibre (blanc)
+      // Couleur : blanc ou couleur joueur (pas de magenta)
       let color = '#FFFFFF';
-      if (segment.forceRatio > 0.2) {
+      if (segment.forceRatio > 0.1) {
         // On gagne : couleur du joueur
         color = playerColor;
-      } else if (segment.forceRatio < -0.2) {
-        // On perd : Magenta (ennemi)
-        color = COLORS.ENEMY;
       }
       
       activeSparkles.push({
-        x: sparkleX,
-        y: sparkleY,
-        vx: Math.cos(perpAngle) * speed,
-        vy: Math.sin(perpAngle) * speed,
+        position: initialPosition,
+        segmentIndex: segIndex,
+        direction,
+        speed,
         life: SPARKLE_LIFETIME,
         maxLife: SPARKLE_LIFETIME,
-        size,
-        brightness,
+        size: PARTICLE_SIZE,
         color,
       });
     }
   }
   
-  // Mettre à jour et nettoyer les particules
+  // Mettre à jour les particules : elles se déplacent le long de la frontière
   for (let i = activeSparkles.length - 1; i >= 0; i--) {
     const sparkle = activeSparkles[i];
     
-    sparkle.x += sparkle.vx * deltaSeconds;
-    sparkle.y += sparkle.vy * deltaSeconds;
+    // Vérifier que le segment existe encore
+    if (sparkle.segmentIndex >= cachedSegments.length) {
+      activeSparkles.splice(i, 1);
+      continue;
+    }
+    
+    const segment = cachedSegments[sparkle.segmentIndex];
+    
+    // Déplacer la particule le long de la frontière
+    const distancePerSecond = sparkle.speed / segment.distance; // Normalisé par la longueur
+    sparkle.position += sparkle.direction * distancePerSecond * deltaSeconds;
+    
+    // Boucler si la particule dépasse les limites (0.0 ou 1.0)
+    if (sparkle.position < 0) {
+      sparkle.position = 1.0 + sparkle.position; // Boucle
+    } else if (sparkle.position > 1.0) {
+      sparkle.position = sparkle.position - 1.0; // Boucle
+    }
+    
     sparkle.life -= deltaSeconds;
     
-    if (sparkle.life <= 0) {
+    // Supprimer si expirée ou si le segment n'existe plus
+    if (sparkle.life <= 0 || segment.pressure < 0.1) {
       activeSparkles.splice(i, 1);
     }
   }
 }
 
 /**
- * Rend les particules de scintillement avec taille et luminosité dynamiques
+ * Rend les particules orbitales le long des frontières
+ * CORRECTION : Les particules sont positionnées sur la ligne de frontière
  */
 export function renderBorderSparkles(ctx: CanvasRenderingContext2D): void {
   if (activeSparkles.length === 0) return;
@@ -124,23 +139,25 @@ export function renderBorderSparkles(ctx: CanvasRenderingContext2D): void {
   ctx.save();
   
   for (const sparkle of activeSparkles) {
+    // Vérifier que le segment existe
+    if (sparkle.segmentIndex >= cachedSegments.length) continue;
+    
+    const segment = cachedSegments[sparkle.segmentIndex];
+    
+    // Calculer la position sur la ligne de frontière
+    const t = sparkle.position; // 0.0 à 1.0 le long du segment
+    const x = segment.playerNodeX + (segment.enemyNodeX - segment.playerNodeX) * t;
+    const y = segment.playerNodeY + (segment.enemyNodeY - segment.playerNodeY) * t;
+    
     const lifeRatio = sparkle.life / sparkle.maxLife;
-    const opacity = lifeRatio * sparkle.brightness; // Opacité avec luminosité
-    const currentSize = sparkle.size * (0.7 + 0.3 * lifeRatio); // Légère réduction en fin de vie
+    const opacity = lifeRatio * PARTICLE_OPACITY; // Opacité 60-80%
     
     ctx.globalAlpha = opacity;
     ctx.fillStyle = sparkle.color;
-    
-    // Glow autour des particules importantes
-    if (sparkle.size > 2) {
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = sparkle.color;
-    } else {
-      ctx.shadowBlur = 0;
-    }
+    ctx.shadowBlur = 0; // Pas de glow pour garder subtil
     
     ctx.beginPath();
-    ctx.arc(sparkle.x, sparkle.y, currentSize, 0, Math.PI * 2);
+    ctx.arc(x, y, sparkle.size, 0, Math.PI * 2);
     ctx.fill();
   }
   

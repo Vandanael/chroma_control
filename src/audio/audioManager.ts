@@ -399,6 +399,26 @@ export function setAudioEnabled(enabled: boolean): void {
 }
 
 /**
+ * Fade out audio doux (pour défaite)
+ */
+export function fadeOutAudio(duration: number = 1.0): void {
+  if (!masterGain || !audioContext) return;
+  
+  const now = audioContext.currentTime;
+  const currentVolume = masterGain.gain.value;
+  
+  // Fade out progressif
+  masterGain.gain.setValueAtTime(currentVolume, now);
+  masterGain.gain.linearRampToValueAtTime(0, now + duration);
+  
+  // Arrêter l'ambiance aussi
+  if (ambientGain) {
+    ambientGain.gain.setValueAtTime(ambientGain.gain.value, now);
+    ambientGain.gain.linearRampToValueAtTime(0, now + duration);
+  }
+}
+
+/**
  * Obtient l'état de l'audio
  */
 export function isAudioActive(): boolean {

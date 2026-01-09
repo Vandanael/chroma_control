@@ -429,8 +429,11 @@
       <!-- 15% vide -->
       <div style="height: 15vh;"></div>
       
-      <!-- Orb Animation Canvas -->
-      <div id="planet-animation-container" style="width: 160px; height: 160px; margin: 0 auto;"></div>
+      <!-- Espace pour l'orbe (hauteur minimale pour préserver l'espace) -->
+      <div style="height: 25vh; position: relative;">
+        <!-- Orb Animation Canvas - Position absolue centrée dans l'espace -->
+        <div id="planet-animation-container" style="position: absolute; width: 320px; height: 320px; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; pointer-events: none;"></div>
+      </div>
       
       <!-- 10% vide -->
       <div style="height: 10vh;"></div>
@@ -477,18 +480,33 @@
       <div id="game-over-title" class="screen-title">SYSTEM SECURE</div>
       <div class="screen-subtitle">Network Status</div>
 
-      <div style="text-align:center; margin: 24px 0 20px;">
-        <div id="game-over-message" style="font-size:14px; color: #00F3FF; line-height: 1.6; margin-bottom: 16px;">
+      <!-- Stats de la partie -->
+      <div id="game-over-stats" style="text-align: center; margin: 24px 0 20px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 0.1em;">
+          <div style="margin-bottom: 8px;">Score: <span id="stat-score" style="color: #FFFFFF;">0%</span></div>
+          <div style="margin-bottom: 8px;">Durée: <span id="stat-duration" style="color: #FFFFFF;">0:00</span></div>
+          <div>Nœuds placés: <span id="stat-nodes" style="color: #FFFFFF;">0</span></div>
+        </div>
+      </div>
+
+      <div style="text-align:center; margin: 20px 0;">
+        <div id="game-over-message" style="font-size:14px; color: #00F3FF; line-height: 1.6; margin-bottom: 20px;">
           Réseau stabilisé.<br />
           Tous les nœuds sont sécurisés.
         </div>
       </div>
 
-      <button id="btn-reboot-system" class="cta-button">
-        REBOOT SYSTEM
-      </button>
+      <!-- Boutons d'action -->
+      <div style="display: flex; gap: 20px; justify-content: center; width: 100%;">
+        <button id="btn-replay-game" class="cta-button" style="flex: 1; max-width: 200px;">
+          REJOUER
+        </button>
+        <button id="btn-back-to-menu" class="cta-button" style="flex: 1; max-width: 200px;">
+          MENU
+        </button>
+      </div>
 
-      <div class="screen-footer" style="margin-top: 20px; text-align: center; color: #FFFFFF; opacity: 0.5; font-size: 10px;">
+      <div class="screen-footer" style="margin-top: 30px; text-align: center; color: #888888; font-size: 11px; opacity: 0.6;">
         <span>Ready for next cycle</span>
       </div>
     </div>

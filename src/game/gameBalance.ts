@@ -52,23 +52,43 @@ export function calculateSignalRangeWithPressure(owner: 'player' | 'enemy'): num
 // =============================================================================
 
 /**
- * Calcule le délai d'action de l'IA selon la saturation du joueur
- * Plus le joueur progresse, plus l'IA devient agressive
+ * Calcule le délai d'action de l'IA selon la saturation du joueur et le temps écoulé
+ * CORRECTION : Scaling de difficulté (+20% à 30s, +40% à 60s)
  */
-export function calculateAIActionDelay(playerSaturation: number): number {
+export function calculateAIActionDelay(playerSaturation: number, elapsedSeconds?: number): number {
   const BASE_DELAY = AI_CONFIG.baseActionDelay;
   const MIN_DELAY = AI_CONFIG.minActionDelay;
   
+  // CORRECTION : Scaling de difficulté selon le temps écoulé
+  let timeMultiplier = 1.0; // Multiplicateur de vitesse (1.0 = normal, < 1.0 = plus rapide)
+  
+  if (elapsedSeconds !== undefined) {
+    if (elapsedSeconds >= 60) {
+      // Après 60s : +40% de vitesse (multiplier 0.6)
+      timeMultiplier = 0.6;
+    } else if (elapsedSeconds >= 30) {
+      // Après 30s : +20% de vitesse (multiplier 0.8)
+      timeMultiplier = 0.8;
+    } else {
+      // Début de partie : 80% de vitesse (multiplier 0.8) pour laisser le joueur s'installer
+      timeMultiplier = 0.8;
+    }
+  }
+  
+  // Calculer le délai de base avec scaling temporel
+  let baseDelay = BASE_DELAY * timeMultiplier;
+  let minDelay = MIN_DELAY * timeMultiplier;
+  
   // Après le seuil de saturation, l'IA accélère progressivement
   if (playerSaturation < AI_CONFIG.aggressiveThreshold) {
-    return BASE_DELAY;
+    return baseDelay;
   }
   
   // Courbe d'accélération : saturation seuil → 1.0 = délai BASE → MIN
   const saturationAboveThreshold = (playerSaturation - AI_CONFIG.aggressiveThreshold) / (1 - AI_CONFIG.aggressiveThreshold);
-  const delayReduction = saturationAboveThreshold * (BASE_DELAY - MIN_DELAY);
+  const delayReduction = saturationAboveThreshold * (baseDelay - minDelay);
   
-  return BASE_DELAY - delayReduction;
+  return baseDelay - delayReduction;
 }
 
 /**

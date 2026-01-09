@@ -24,7 +24,7 @@
  */
 export const AI_CONFIG = {
   /** Délai de démarrage avant que l'IA commence à agir (en millisecondes) */
-  startDelayMs: 5000,
+  startDelayMs: 1500, // CORRECTION : Premier nœud à 1-2s (5000 → 1500ms)
   
   /** Portée maximum pour le placement de nœuds par l'IA (en pixels) */
   maxPlacementRange: 200,
@@ -33,10 +33,10 @@ export const AI_CONFIG = {
   expansionAngleVariance: Math.PI / 4,
   
   /** Délai de base entre les actions de l'IA (en millisecondes) */
-  baseActionDelay: 4000,
+  baseActionDelay: 2500, // CORRECTION : Placement toutes les 2-3s (5000 → 2500ms)
   
-  /** Délai minimum entre les actions (en millisecondes) - très agressif */
-  minActionDelay: 1500,
+  /** Délai minimum entre les actions (en millisecondes) */
+  minActionDelay: 2000, // CORRECTION : Minimum 2s (gardé)
   
   /** Seuil de saturation du joueur à partir duquel l'IA devient agressive (0-1) */
   aggressiveThreshold: 0.4,
@@ -189,10 +189,10 @@ export const RESOURCES_CONFIG = {
   fluxInitial: 50,
   
   /** Régénération passive de FLUX par seconde */
-  fluxRegenPerSecond: 2,
+  fluxRegenPerSecond: 3, // ÉQUILIBRAGE : Augmenté de 2 → 3/s
   
   /** FLUX généré par nœud par seconde */
-  fluxPerNode: 0.5,
+  fluxPerNode: 0.75, // ÉQUILIBRAGE : Augmenté de 0.5 → 0.75/nœud
   
   /** Coût en FLUX pour un Double-Tap */
   doubleTapCost: 30,

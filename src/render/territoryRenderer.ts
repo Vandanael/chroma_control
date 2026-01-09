@@ -22,6 +22,7 @@ const TERRITORY_OPACITY = 0.25; // CORRECTION : Opacité augmentée (0.15 → 0.
 
 /**
  * Rend l'overlay territorial (BLOC 5.2)
+ * CORRECTION VISUELLE : Anti-aliasing avec gradients radiaux pour bords doux
  */
 export function renderTerritoryOverlay(
   ctx: CanvasRenderingContext2D,
@@ -33,23 +34,39 @@ export function renderTerritoryOverlay(
   
   ctx.save();
   
-  // Parcourir la grille et dessiner les zones
+  // Activer l'anti-aliasing pour des bords doux
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  
+  // Parcourir la grille et dessiner les zones avec gradients radiaux pour bords doux
   for (let gy = 0; gy < gridHeight; gy++) {
     for (let gx = 0; gx < gridWidth; gx++) {
       const x = gx * TERRITORY_GRID_SIZE;
       const y = gy * TERRITORY_GRID_SIZE;
+      const centerX = x + TERRITORY_GRID_SIZE / 2;
+      const centerY = y + TERRITORY_GRID_SIZE / 2;
       
-      const influence = calculateTerritoryInfluence(x, y);
+      const influence = calculateTerritoryInfluence(centerX, centerY);
       
       if (influence === 'neutral') continue; // Ne pas dessiner les zones neutres
       
       // Couleur selon la zone
-      if (influence === 'player') {
-        ctx.fillStyle = getPlayerColorValue() + Math.floor(TERRITORY_OPACITY * 255).toString(16).padStart(2, '0');
-      } else {
-        ctx.fillStyle = COLORS.ENEMY + Math.floor(TERRITORY_OPACITY * 255).toString(16).padStart(2, '0');
-      }
+      const baseColor = influence === 'player' ? getPlayerColorValue() : COLORS.ENEMY;
       
+      // Créer un gradient radial avec feather edge pour bords doux
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, 0,                    // Centre
+        centerX, centerY, TERRITORY_GRID_SIZE * 0.7  // Rayon avec fade out
+      );
+      
+      const colorOpaque = baseColor + Math.floor(TERRITORY_OPACITY * 255).toString(16).padStart(2, '0');
+      const colorTransparent = baseColor + '00'; // Transparent
+      
+      gradient.addColorStop(0, colorOpaque);
+      gradient.addColorStop(0.7, colorOpaque);
+      gradient.addColorStop(1, colorTransparent);
+      
+      ctx.fillStyle = gradient;
       ctx.fillRect(x, y, TERRITORY_GRID_SIZE, TERRITORY_GRID_SIZE);
     }
   }

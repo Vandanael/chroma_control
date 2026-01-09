@@ -74,6 +74,7 @@ function cleanupExpiredConnections(now: number): void {
 
 /**
  * Rend les connexions éphémères (flash de lumière qui parcourt le maillage)
+ * CORRECTION VISUELLE : Uniquement connexions joueur (supprimer ennemies)
  */
 export function renderEphemeralConnections(ctx: CanvasRenderingContext2D): void {
   const now = performance.now();
@@ -85,17 +86,12 @@ export function renderEphemeralConnections(ctx: CanvasRenderingContext2D): void 
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   
-  // Séparer par propriétaire
+  // CORRECTION : Uniquement les connexions joueur (supprimer ennemies)
   const playerConnections = ephemeralConnections.filter(c => c.owner === 'player');
-  const enemyConnections = ephemeralConnections.filter(c => c.owner === 'enemy');
   
-  // Rendre les connexions joueur
+  // Rendre UNIQUEMENT les connexions joueur
   ctx.strokeStyle = getPlayerColorValue();
   renderConnectionsForOwner(ctx, playerConnections, now);
-  
-  // Rendre les connexions ennemi
-  ctx.strokeStyle = COLORS.ENEMY;
-  renderConnectionsForOwner(ctx, enemyConnections, now);
   
   ctx.restore();
 }
@@ -134,12 +130,8 @@ function renderConnectionsForOwner(
     
     ctx.globalAlpha = opacity * pulse * avgOpacity;
     
-    // lineWidth proportionnel à la power moyenne
-    const avgPower = (node1.power + node2.power) / 2;
-    const baseLineWidth = Math.max(2, avgPower / 10);
-    const lineWidth = calculateLinkThickness(node1, node2, baseLineWidth);
-    
-    ctx.lineWidth = lineWidth;
+    // CORRECTION : Épaisseur 1px maximum (lignes subtiles)
+    ctx.lineWidth = 1;
     
     // Dessiner la ligne
     ctx.beginPath();

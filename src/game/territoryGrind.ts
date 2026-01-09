@@ -10,7 +10,7 @@ import { type GameNode, getAllNodes, getNodesByOwner } from './nodeManager';
 // =============================================================================
 
 const GRIND_CHECK_INTERVAL = 100; // Vérifier toutes les 100ms
-const ERASE_RATE = 0.1; // Taux d'effacement par frame (10% par seconde)
+const ERASE_RATE = 0.06; // ÉQUILIBRAGE : Réduit de 0.1 → 0.06 (6% par seconde au lieu de 10%)
 
 // =============================================================================
 // STATE

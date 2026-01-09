@@ -290,41 +290,35 @@ function renderSynapsesBatchedForOwner(
 
 /**
  * Rend les lignes de connexion permanentes (si activées)
- * Opacité subtile (0.3) pour ne pas surcharger visuellement
+ * CORRECTION VISUELLE : Uniquement lignes alliées (joueur), opacité 30-40%, épaisseur 1px max, style pointillé
  */
 function renderPermanentConnections(ctx: CanvasRenderingContext2D, nodes: GameNode[]): void {
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   
-  // Séparer par propriétaire
+  // CORRECTION : Uniquement les nœuds joueur (supprimer lignes ennemies)
   const playerNodes = acquireArray<GameNode>();
-  const enemyNodes = acquireArray<GameNode>();
   
   for (const node of nodes) {
     if (node.owner === 'player') {
       playerNodes.push(node);
-    } else {
-      enemyNodes.push(node);
     }
   }
   
-  // Rendre les connexions joueur
+  // Rendre UNIQUEMENT les connexions joueur
   const playerColor = getPlayerColorValue();
   renderPermanentConnectionsForOwner(ctx, playerNodes, playerColor);
   
-  // Rendre les connexions ennemi
-  renderPermanentConnectionsForOwner(ctx, enemyNodes, COLORS.ENEMY);
-  
-  // Libérer les tableaux
+  // Libérer le tableau
   releaseArray(playerNodes);
-  releaseArray(enemyNodes);
   
   ctx.restore();
 }
 
 /**
  * Rend les connexions permanentes pour un propriétaire donné
+ * CORRECTION VISUELLE : Opacité 30-40%, épaisseur 1px max, style pointillé subtil
  */
 function renderPermanentConnectionsForOwner(
   ctx: CanvasRenderingContext2D,
@@ -347,20 +341,30 @@ function renderPermanentConnectionsForOwner(
         continue;
       }
       
-      // Opacité subtile (0.3) pour ne pas surcharger
+      // Opacité 30-40% (0.3 à 0.4) selon atténuation par distance
       const nodeOpacity1 = calculateNodeOpacity(node);
       const nodeOpacity2 = calculateNodeOpacity(connected);
       const avgOpacity = (nodeOpacity1 + nodeOpacity2) / 2;
       
-      ctx.globalAlpha = 0.3 * avgOpacity;
+      // Opacité entre 0.3 et 0.4 selon la distance
+      const baseOpacity = 0.3 + (avgOpacity * 0.1); // 0.3 à 0.4
+      ctx.globalAlpha = baseOpacity;
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5; // Ligne fine et subtile
+      
+      // CORRECTION : Épaisseur 1px maximum
+      ctx.lineWidth = 1;
+      
+      // CORRECTION : Style pointillé subtil (2px tiret, 3px espace)
+      ctx.setLineDash([2, 3]);
       
       // Ligne droite simple
       ctx.beginPath();
       ctx.moveTo(node.x, node.y);
       ctx.lineTo(connected.x, connected.y);
       ctx.stroke();
+      
+      // Réinitialiser le style de ligne pour ne pas affecter d'autres rendus
+      ctx.setLineDash([]);
       
       drawnConnections.add(key1);
     }

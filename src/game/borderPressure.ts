@@ -16,6 +16,11 @@ export interface BorderSegment {
   pressure: number; // 0.0 à 1.0 (intensité du conflit)
   forceRatio: number; // -1.0 (on perd) à +1.0 (on gagne)
   distance: number; // Distance entre les nœuds
+  // CORRECTION : Ajout des positions des nœuds pour calculer la ligne de frontière
+  playerNodeX: number;
+  playerNodeY: number;
+  enemyNodeX: number;
+  enemyNodeY: number;
 }
 
 // =============================================================================
@@ -83,6 +88,11 @@ export function calculateBorderSegments(): BorderSegment[] {
           pressure,
           forceRatio,
           distance,
+          // CORRECTION : Positions des nœuds pour calculer la ligne
+          playerNodeX: playerNode.x,
+          playerNodeY: playerNode.y,
+          enemyNodeX: enemyNode.x,
+          enemyNodeY: enemyNode.y,
         });
       }
     }
