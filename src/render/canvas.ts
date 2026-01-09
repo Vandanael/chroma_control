@@ -28,19 +28,22 @@ export function initCanvas(canvasId: string = 'game-canvas'): CanvasContext {
   // Setup resize handler
   const resize = () => {
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
+    
+    // Force 100% width/height
+    const width = window.innerWidth;
+    const height = window.innerHeight;
 
     // Set actual canvas size in memory (scaled for Retina)
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
 
     // Scale context to match DPR
     ctx.scale(dpr, dpr);
 
     // Update context reference
     if (canvasContext) {
-      canvasContext.width = rect.width;
-      canvasContext.height = rect.height;
+      canvasContext.width = width;
+      canvasContext.height = height;
       canvasContext.dpr = dpr;
     }
 
@@ -59,8 +62,8 @@ export function initCanvas(canvasId: string = 'game-canvas'): CanvasContext {
   canvasContext = {
     canvas,
     ctx,
-    width: canvas.getBoundingClientRect().width,
-    height: canvas.getBoundingClientRect().height,
+    width: window.innerWidth,
+    height: window.innerHeight,
     dpr: window.devicePixelRatio || 1,
   };
 

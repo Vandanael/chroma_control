@@ -46,13 +46,12 @@ function init(): void {
   wireUiLayers();
 
   // 5. Log initialization complete
-  console.log('[Chroma Control] Sprint 0 Ready!');
+  console.log('[Chroma Control] MACRO GRID (25x16) Ready!');
   console.log('');
-  console.log('=== CONTROLS ===');
-  console.log('Tap (<300ms)      → Scout [SCT]');
-  console.log('Hold (300-1500ms) → Defender [DEF]');
-  console.log('Long (>1500ms)    → Attacker [ATK]');
-  console.log('================');
+  console.log('=== 400 TACTICAL CELLS ===');
+  console.log('Grid: 25 columns × 16 rows');
+  console.log('HQ: Bottom center (col 12, row 15)');
+  console.log('======================');
 }
 
 // =============================================================================

@@ -1,13 +1,13 @@
 /**
  * Render Engine - Game Loop & Debug Overlay
- * Voronoi organic system (Blocs 0.2 + 1.1)
+ * MACRO GRID System - 25x16 Tactical Grid
  */
 
 import { CanvasContext, DebugState, TouchState } from '../types';
 import { clearCanvas, applyGrain } from './canvas';
 import { updateTouchState, getInputLatency } from '../input/touch';
-import { initVoronoiGrid, updateCellAnimations, getDiagram } from '../game/voronoiManager';
-import { renderVoronoiCells } from './voronoiRenderer';
+import { initGrid, getCells } from '../game/gridManager';
+import { renderGrid } from './gridRenderer';
 
 // =============================================================================
 // STATE
@@ -23,7 +23,6 @@ const debugState: DebugState = {
   state: 'IDLE',
 };
 
-let lastRenderTimestamp: number | null = null;
 let animationFrameId: number | null = null;
 let canvasContext: CanvasContext | null = null;
 
@@ -91,13 +90,6 @@ function render(timestamp: number): void {
 
   const { ctx, width, height } = canvasContext;
 
-  // Delta time
-  let deltaSeconds = 0;
-  if (lastRenderTimestamp !== null) {
-    deltaSeconds = (timestamp - lastRenderTimestamp) / 1000;
-  }
-  lastRenderTimestamp = timestamp;
-
   // Update FPS
   updateFPS(timestamp);
 
@@ -116,17 +108,14 @@ function render(timestamp: number): void {
   // Apply paper grain texture (Bloc 0.2)
   applyGrain(ctx, width, height, 0.03);
 
-  // Initialize Voronoi grid if needed (Bloc 1.1 - Sprint 1)
-  if (!getDiagram()) {
-    initVoronoiGrid(width, height, 25);
+  // Initialize 25x16 grid if needed
+  const cells = getCells();
+  if (cells.length === 0) {
+    initGrid(width, height);
   }
 
-  // Update Voronoi cell animations
-  const deltaMs = deltaSeconds * 1000;
-  updateCellAnimations(deltaMs);
-
-  // Render Voronoi cells
-  renderVoronoiCells(ctx, width, height);
+  // Render tactical grid (400 cells)
+  renderGrid(ctx);
 
   // Update debug overlay
   updateDebugOverlay(touchState);
