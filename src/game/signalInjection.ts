@@ -3,7 +3,7 @@
  * L'aura gonfle et devient plus opaque, grignotant le territoire ennemi
  */
 
-import { type GameNode, getAllNodes, getNodesByOwner } from './nodeManager';
+import { type GameNode, getAllNodes, getNodesByOwner, getNodeById } from './nodeManager';
 import { getPlayerColorValue } from './playerColor';
 import { COLORS } from './game/constants';
 
@@ -57,6 +57,11 @@ export function injectSignal(nodeId: string): void {
     nodeId,
     timestamp: now,
     initialAuraRadius: 120, // Rayon de base de l'aura
+  });
+  
+  // Déclencher l'onde radar (animation organique)
+  import('../render/organicAnimations').then(({ triggerRadarWave }) => {
+    triggerRadarWave(nodeId, node.x, node.y);
   });
   
   console.log(`[SignalInjection] Signal injected into node ${nodeId}`);

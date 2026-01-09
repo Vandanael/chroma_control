@@ -54,12 +54,26 @@ export function initOrbAnimation(containerId: string): void {
     return;
   }
 
+  // Vérifier si un canvas existe déjà (éviter la double initialisation)
+  if (canvas && canvas.parentNode === container) {
+    console.log('[OrbAnimation] Animation already initialized, skipping');
+    return;
+  }
+
+  // Nettoyer l'ancien canvas s'il existe ailleurs
+  if (canvas && canvas.parentNode) {
+    canvas.parentNode.removeChild(canvas);
+  }
+
   // Créer le canvas
   canvas = document.createElement('canvas');
   canvas.width = 160; // Taille pour orbe 60-80px + marge
   canvas.height = 160;
   canvas.style.display = 'block';
   canvas.style.margin = '0 auto';
+  canvas.style.pointerEvents = 'none'; // Ne pas bloquer les clics
+  canvas.style.position = 'relative';
+  canvas.style.zIndex = '1'; // Au-dessus du fond mais sous les boutons
   
   ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) {

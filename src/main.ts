@@ -255,8 +255,20 @@ function wireUiLayers(): void {
 
     // Afficher/masquer les écrans
     if (startScreen) {
-      (startScreen as HTMLElement).style.display =
-        state === 'START' ? 'flex' : 'none';
+      const isVisible = state === 'START';
+      (startScreen as HTMLElement).style.display = isVisible ? 'flex' : 'none';
+      
+      // L'animation est déjà initialisée dans init(), pas besoin de la réinitialiser ici
+    }
+    
+    // Désactiver les événements pointer sur le canvas quand on n'est pas en jeu
+    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+    if (canvas) {
+      if (state === 'PLAYING') {
+        canvas.style.pointerEvents = 'auto';
+      } else {
+        canvas.style.pointerEvents = 'none';
+      }
     }
     if (gameOverScreen) {
       (gameOverScreen as HTMLElement).style.display =

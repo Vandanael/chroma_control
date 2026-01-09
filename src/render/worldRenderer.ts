@@ -11,6 +11,15 @@ import { calculateNodeOpacity, calculateLinkThickness } from '../game/signalPhys
 import { calculateSignalPosition, drawSignalFlow } from './signalFlow';
 import { calculatePopScale } from './gameFeel';
 import { spawnPlacementParticles } from './particles';
+import {
+  getNodeOrganicRadius,
+  getTerritoryWaveRadius,
+  renderRadarWaves,
+  initOrbitingParticles,
+  renderOrbitingParticles,
+  hasOrbitingParticles,
+  clearOrganicAnimations,
+} from './organicAnimations';
 
 // =============================================================================
 // CONSTANTS
@@ -43,6 +52,29 @@ export function renderWorld(ctx: CanvasRenderingContext2D): void {
 
   // ÉTAPE 2 : LES NŒUDS - DESSINER AU-DESSUS
   drawNodes(ctx, nodes);
+  
+  // ÉTAPE 3 : ONDES RADAR (pour nœuds boostés)
+  const now = performance.now();
+  const playerColor = getPlayerColorValue();
+  renderRadarWaves(ctx, BASE_NODE_RADIUS, (nodeId: string) => {
+    const node = getNodeById(nodeId);
+    return node ? { x: node.x, y: node.y } : null;
+  });
+  
+  // ÉTAPE 4 : PARTICULES EN ORBITE (pour nœuds hubs)
+  const playerNodes = nodes.filter(n => n.owner === 'player');
+  for (const node of playerNodes) {
+    // Nœud hub = 3+ connexions
+    if (node.connections && node.connections.length >= 3) {
+      if (!hasOrbitingParticles(node.id)) {
+        initOrbitingParticles(node.id, 1); // 1 particule par hub
+      }
+    }
+  }
+  renderOrbitingParticles(ctx, BASE_NODE_RADIUS, (nodeId: string) => {
+    const node = getNodeById(nodeId);
+    return node ? { x: node.x, y: node.y } : null;
+  }, playerColor);
   
   // NOTE : Les synapses permanentes sont supprimées pour le minimalisme
   // Seules les connexions éphémères (500ms) sont affichées (gérées par ephemeralConnections.ts)
@@ -141,10 +173,25 @@ function drawAurasForOwner(
     gradient.addColorStop(0.95, colorEdge);
     gradient.addColorStop(1, colorFade);
     
-    // Dessiner l'aura
+    // Dessiner l'aura avec ondulation organique
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, auraRadius, 0, Math.PI * 2);
+    
+    // Utiliser l'ondulation organique pour le contour de l'aura
+    const segments = 48; // Plus de segments pour une ondulation plus fluide
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const waveRadius = getTerritoryWaveRadius(auraRadius, angle, now, node.id);
+      const x = node.x + waveRadius * Math.cos(angle);
+      const y = node.y + waveRadius * Math.sin(angle);
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
     ctx.fill();
   }
 }
@@ -324,7 +371,7 @@ function getDistanceFromDropPod(node: GameNode): { distance: number } {
 }
 
 /**
- * Dessine un nœud avec taille dynamique et animations
+ * Dessine un nœud avec taille dynamique et animations organiques
  */
 function drawNode(ctx: CanvasRenderingContext2D, node: GameNode): void {
   const now = performance.now();
@@ -355,7 +402,7 @@ function drawNode(ctx: CanvasRenderingContext2D, node: GameNode): void {
     }
   }
 
-  const radius = baseRadius * scale;
+  const baseRadiusScaled = baseRadius * scale;
 
   // Gestion de l'isolation (mort progressive)
   if (node.isIsolated && node.isolationTime) {
@@ -373,6 +420,26 @@ function drawNode(ctx: CanvasRenderingContext2D, node: GameNode): void {
   // Couleur selon le propriétaire
   const color = node.owner === 'player' ? getPlayerColorValue() : COLORS.ENEMY;
 
+  // Déterminer l'état du nœud pour l'animation organique
+  let nodeState: 'calm' | 'boosted' | 'stressed' = 'calm';
+  
+  // Vérifier si le nœud est boosté (injection de signal active)
+  let signalInjectionModule: typeof import('../game/signalInjection') | null = null;
+  import('../game/signalInjection').then(module => {
+    signalInjectionModule = module;
+  });
+  
+  if (signalInjectionModule) {
+    const multiplier = signalInjectionModule.getAuraMultiplier(node.id, now);
+    if (multiplier > 1.0) {
+      nodeState = 'boosted';
+    }
+  }
+  
+  // Vérifier si le nœud est sous pression (frontière contestée)
+  // TODO: Implémenter la détection de frontière contestée
+  // Pour l'instant, on garde 'calm' ou 'boosted'
+
   // Animation de scintillement (glow pulsant)
   const glowPulse = Math.sin(now * GLOW_PULSE_SPEED) * 0.3 + 0.7; // 0.4 à 1.0
   const shadowBlur = 15 * glowPulse * opacity;
@@ -383,15 +450,16 @@ function drawNode(ctx: CanvasRenderingContext2D, node: GameNode): void {
   ctx.globalAlpha = opacity;
   ctx.fillStyle = color;
 
-  // BLOC 4.4 : Fortress = hexagone, autres = cercle
+  // BLOC 4.4 : Fortress = hexagone, autres = cercle avec déformation organique
   if (node.nodeType === 'fortress') {
-    // Dessiner un hexagone
+    // Dessiner un hexagone avec déformation organique
     ctx.beginPath();
     const sides = 6;
     for (let i = 0; i < sides; i++) {
       const angle = (Math.PI / 3) * i - Math.PI / 2; // Rotation pour pointe en haut
-      const x = node.x + radius * Math.cos(angle);
-      const y = node.y + radius * Math.sin(angle);
+      const organicRadius = getNodeOrganicRadius(baseRadiusScaled, angle, now, node.id, nodeState);
+      const x = node.x + organicRadius * Math.cos(angle);
+      const y = node.y + organicRadius * Math.sin(angle);
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -407,9 +475,22 @@ function drawNode(ctx: CanvasRenderingContext2D, node: GameNode): void {
     ctx.globalAlpha = opacity * 0.8;
     ctx.stroke();
   } else {
-    // Cercle rempli (nœuds normaux)
+    // Cercle avec déformation organique (nœuds normaux)
     ctx.beginPath();
-    ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+    const segments = 32; // Nombre de segments pour la déformation organique
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const organicRadius = getNodeOrganicRadius(baseRadiusScaled, angle, now, node.id, nodeState);
+      const x = node.x + organicRadius * Math.cos(angle);
+      const y = node.y + organicRadius * Math.sin(angle);
+      
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
     ctx.fill();
   }
 
@@ -419,7 +500,7 @@ function drawNode(ctx: CanvasRenderingContext2D, node: GameNode): void {
     ctx.globalAlpha = opacity * 0.8;
     ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(node.x, node.y, radius * 0.4, 0, Math.PI * 2);
+    ctx.arc(node.x, node.y, baseRadiusScaled * 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
 

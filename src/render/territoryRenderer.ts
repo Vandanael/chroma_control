@@ -7,6 +7,7 @@ import { calculateTerritoryInfluence, areZonesContested } from '../game/territor
 import { getNodesByOwner } from '../game/nodeManager';
 import { getPlayerColorValue } from '../game/playerColor';
 import { COLORS } from '../game/constants';
+import { getBorderWaveOffset } from './organicAnimations';
 
 // =============================================================================
 // CONSTANTS
@@ -166,9 +167,31 @@ export function renderContestedBorders(
     const dashLength = 8 - pressure * 4; // 8px à 4px
     ctx.setLineDash([dashLength, 4]);
     
+    // Dessiner la frontière avec ondulation organique
     ctx.beginPath();
-    ctx.moveTo(playerNode.x, playerNode.y);
-    ctx.lineTo(enemyNode.x, enemyNode.y);
+    const segments = 20; // Nombre de segments pour l'ondulation
+    const dx = enemyNode.x - playerNode.x;
+    const dy = enemyNode.y - playerNode.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const perpX = -dy / distance; // Vecteur perpendiculaire
+    const perpY = dx / distance;
+    
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments; // 0 à 1 le long de la frontière
+      const baseX = playerNode.x + dx * t;
+      const baseY = playerNode.y + dy * t;
+      
+      // Ondulation organique perpendiculaire à la ligne
+      const waveOffset = getBorderWaveOffset(t, now, pressure);
+      const offsetX = baseX + perpX * waveOffset * distance * 0.1;
+      const offsetY = baseY + perpY * waveOffset * distance * 0.1;
+      
+      if (i === 0) {
+        ctx.moveTo(offsetX, offsetY);
+      } else {
+        ctx.lineTo(offsetX, offsetY);
+      }
+    }
     ctx.stroke();
     
     // Glow autour de la ligne pour les fronts très actifs

@@ -80,6 +80,11 @@
       display: block;
       touch-action: none;
       z-index: 0;
+      pointer-events: none; /* Désactivé par défaut, activé seulement en jeu */
+    }
+    
+    body[data-game-state="PLAYING"] #game-canvas {
+      pointer-events: auto; /* Activé seulement pendant le jeu */
     }
 
     /* START / GAME OVER / REPLAY overlays - Minimalist Retro-Futur */

@@ -93,6 +93,7 @@ export function resetScore(): void {
   import('./doubleTapBurst').then(({ clearBursts }) => clearBursts());
   import('../render/borderSparkles').then(({ clearBorderSparkles }) => clearBorderSparkles());
   import('../render/territoryDissolution').then(({ clearTerritoryDissolution }) => clearTerritoryDissolution());
+  import('../render/organicAnimations').then(({ clearOrganicAnimations }) => clearOrganicAnimations());
   import('../ui/doubleTapTutorial').then(({ resetTutorial }) => resetTutorial());
 }
 
