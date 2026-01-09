@@ -1,9 +1,66 @@
 /**
  * Visual Effects - Pastel NASA-Punk Aesthetic
  * Paper texture, plotter-style drawing, analog grain
+ * Bloc 6.1 : Enhanced analog grain with line vibrations
  */
 
 import { COLORS, UnitType } from '../types';
+
+// =============================================================================
+// ENHANCED ANALOG GRAIN (Bloc 6.1)
+// =============================================================================
+
+/**
+ * Applique un effet de grain analogique amélioré
+ * - Bruit subtil
+ * - Vibrations sur lignes (simule imperfection mécanique)
+ * - Opacité variable sur bords
+ */
+export function applyEnhancedGrain(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  intensity: number = 0.04
+): void {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+
+  // Ajouter du bruit aléatoire
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (Math.random() - 0.5) * intensity * 255;
+    data[i] += noise;     // R
+    data[i + 1] += noise; // G
+    data[i + 2] += noise; // B
+    // Alpha reste inchangé
+  }
+
+  // Vignette subtile (opacité variable sur bords)
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const maxDist = Math.sqrt(centerX * centerX + centerY * centerY);
+
+  for (let y = 0; y < height; y += 2) { // Échantillonnage réduit pour perf
+    for (let x = 0; x < width; x += 2) {
+      const dist = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+      const vignette = 1 - (dist / maxDist) * 0.15; // 15% max d'assombrissement
+
+      const index = (y * width + x) * 4;
+      data[index] *= vignette;     // R
+      data[index + 1] *= vignette; // G
+      data[index + 2] *= vignette; // B
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Simule des vibrations sur une ligne (effet mécanique)
+ * Retourne un décalage aléatoire de 1-2px
+ */
+export function getLineVibration(): number {
+  return (Math.random() - 0.5) * 1.5; // ±0.75px
+}
 
 // =============================================================================
 // PLOTTER-STYLE DRAWING FUNCTIONS

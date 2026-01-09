@@ -10,6 +10,7 @@
 
 import { initCanvas } from './render/canvas';
 import { initTouchInput, onTouchEnd, onUnitChange } from './input/touch';
+import { initGridInput } from './input/gridInput';
 import { startEngine } from './render/engine';
 import { UnitType } from './types';
 import {
@@ -19,7 +20,9 @@ import {
   onGameStateChange,
   resetScore,
   setGameState,
+  startTimer,
 } from './game/state';
+import { setAIEnabled, initAI } from './game/ai';
 
 // =============================================================================
 // INITIALIZATION
@@ -38,19 +41,26 @@ function init(): void {
   initTouchInput(canvasContext.canvas);
   console.log('[Input] Touch handlers registered');
 
-  // 3. Start Render Engine
+  // 3. Initialize Grid Input (Bloc 2.2)
+  initGridInput(canvasContext.canvas);
+  console.log('[Input] Grid click handlers registered');
+
+  // 4. Start Render Engine
   startEngine(canvasContext);
   console.log('[Engine] Render loop started');
 
-  // 4. UI wiring: START / REPLAY / DEBUG
+  // 5. UI wiring: START / REPLAY / DEBUG
   wireUiLayers();
 
-  // 5. Log initialization complete
-  console.log('[Chroma Control] MACRO GRID (25x16) Ready!');
+  // 6. Log initialization complete
+  console.log('[Chroma Control] MACRO GRID + OUTPOST DEPLOYMENT Ready!');
   console.log('');
   console.log('=== 400 TACTICAL CELLS ===');
   console.log('Grid: 25 columns × 16 rows');
   console.log('HQ: Bottom center (col 12, row 15)');
+  console.log('');
+  console.log('=== CONTROLS ===');
+  console.log('Click on neutral/enemy cell → Deploy outpost (250ms/cell)');
   console.log('======================');
 }
 
@@ -89,12 +99,18 @@ function wireUiLayers(): void {
   // START → PLAYING
   startButton?.addEventListener('click', () => {
     resetScore();
+    initAI();        // Bloc 5.2
+    setAIEnabled(true);
+    startTimer();    // Bloc 5.3
     setGameState('PLAYING');
   });
 
   // REPLAY → nouveau RUN
   replayButton?.addEventListener('click', () => {
     resetScore();
+    initAI();
+    setAIEnabled(true);
+    startTimer();
     setGameState('PLAYING');
   });
 

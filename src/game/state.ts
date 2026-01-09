@@ -18,10 +18,18 @@ export interface GameScore {
   defenders: number;
   attackers: number;
   /**
-   * Points générés par la possession de nexus.
-   * Sprint 1 : +1 point / seconde pendant que le nexus est capturé.
+   * Points générés par la possession de cellules.
+   * Sprint 5 : +1 point / seconde par cellule.
    */
   nexusPoints: number;
+  /**
+   * Score basé sur territoire (Sprint 5.4)
+   */
+  territoryScore: number;
+  /**
+   * Score de l'IA
+   */
+  enemyScore: number;
 }
 
 type GameStateListener = (state: GameState, score: GameScore) => void;
@@ -33,6 +41,8 @@ const score: GameScore = {
   defenders: 0,
   attackers: 0,
   nexusPoints: 0,
+  territoryScore: 0,
+  enemyScore: 0,
 };
 
 const energy: EnergyState = {
@@ -56,6 +66,8 @@ export function resetScore(): void {
   score.defenders = 0;
   score.attackers = 0;
   score.nexusPoints = 0;
+  score.territoryScore = 0;
+  score.enemyScore = 0;
   energy.current = 50;
 }
 
@@ -114,4 +126,88 @@ export function spendEnergy(amount: number): boolean {
   if (energy.current < amount) return false;
   energy.current -= amount;
   return true;
+}
+
+// =============================================================================
+// TIMER (Sprint 5.3)
+// =============================================================================
+
+interface TimerState {
+  enabled: boolean;
+  startTime: number;
+  duration: number; // en secondes
+  remaining: number; // en secondes
+}
+
+const timer: TimerState = {
+  enabled: false,
+  startTime: 0,
+  duration: 300, // 5 minutes
+  remaining: 300,
+};
+
+export function startTimer(): void {
+  timer.enabled = true;
+  timer.startTime = performance.now();
+  timer.remaining = timer.duration;
+  console.log('[Timer] Started: 5:00');
+}
+
+export function stopTimer(): void {
+  timer.enabled = false;
+}
+
+export function updateTimer(currentTime: number): void {
+  if (!timer.enabled) return;
+
+  const elapsed = (currentTime - timer.startTime) / 1000; // en secondes
+  timer.remaining = Math.max(0, timer.duration - elapsed);
+
+  // Fin du match si timer à 0
+  if (timer.remaining <= 0 && currentState === 'PLAYING') {
+    console.log('[Timer] Time\'s up!');
+    setGameState('REPLAY');
+  }
+}
+
+export function getTimer(): { remaining: number; minutes: number; seconds: number } {
+  const minutes = Math.floor(timer.remaining / 60);
+  const seconds = Math.floor(timer.remaining % 60);
+  return { remaining: timer.remaining, minutes, seconds };
+}
+
+// =============================================================================
+// SCORE CALCULATION (Sprint 5.4)
+// =============================================================================
+
+/**
+ * Calcule le score basé sur le territoire contrôlé
+ */
+export function updateTerritoryScore(playerCells: number, enemyCells: number, deltaSeconds: number): void {
+  if (deltaSeconds <= 0) return;
+
+  // +1 point/seconde par cellule
+  const playerPoints = playerCells * deltaSeconds;
+  const enemyPoints = enemyCells * deltaSeconds;
+
+  score.territoryScore += playerPoints;
+  score.enemyScore += enemyPoints;
+}
+
+/**
+ * Vérifie les conditions de victoire
+ */
+export function checkVictoryConditions(): void {
+  if (currentState !== 'PLAYING') return;
+
+  const VICTORY_SCORE = 500;
+
+  // Victoire par score
+  if (score.territoryScore >= VICTORY_SCORE) {
+    console.log('[Victory] Player wins by score!');
+    setGameState('REPLAY');
+  } else if (score.enemyScore >= VICTORY_SCORE) {
+    console.log('[Victory] Enemy wins by score!');
+    setGameState('REPLAY');
+  }
 }

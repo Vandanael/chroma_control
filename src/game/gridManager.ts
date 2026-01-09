@@ -17,6 +17,10 @@ export interface GridCell {
   size: number;     // Cell size (square)
   owner: CellOwner;
   isHQ: boolean;    // Headquarters flag
+  isOutpost: boolean; // Avant-Poste flag (Bloc 2.2)
+  isFortified: boolean; // Fortified flag (Bloc 4.2)
+  signalStrength: number; // 0-100 (Bloc 4.3)
+  isConnected: boolean; // Bloc 2.4: Connecté au HQ via flood fill
 }
 
 // =============================================================================
@@ -73,6 +77,10 @@ export function initGrid(canvasWidth: number, canvasHeight: number): void {
         size: cellSize,
         owner: isHQ ? 'player' : 'neutral',
         isHQ,
+        isOutpost: false,
+        isFortified: false,
+        signalStrength: isHQ ? 100 : 0,
+        isConnected: isHQ, // HQ toujours connecté au départ
       });
     }
   }
@@ -117,4 +125,98 @@ export function setCellOwner(col: number, row: number, owner: CellOwner): void {
   if (cell) {
     cell.owner = owner;
   }
+}
+
+/**
+ * Capture a cell and mark it as outpost
+ */
+export function captureAsOutpost(col: number, row: number, owner: CellOwner): void {
+  const cell = getCellAt(col, row);
+  if (cell) {
+    cell.owner = owner;
+    cell.isOutpost = true;
+    cell.signalStrength = 100;
+  }
+}
+
+/**
+ * Fortify a cell (Bloc 4.2)
+ */
+export function fortifyCell(col: number, row: number): boolean {
+  const cell = getCellAt(col, row);
+  if (cell && cell.owner === 'player' && !cell.isFortified) {
+    cell.isFortified = true;
+    console.log(`[GridManager] Cell (${col}, ${row}) fortified`);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Unfortify a cell
+ */
+export function unfortifyCell(col: number, row: number): void {
+  const cell = getCellAt(col, row);
+  if (cell) {
+    cell.isFortified = false;
+  }
+}
+
+/**
+ * Get all fortified cells
+ */
+export function getFortifiedCells(): GridCell[] {
+  return cells.filter(c => c.isFortified);
+}
+
+/**
+ * Get all cells owned by a specific owner
+ */
+export function getCellsByOwner(owner: CellOwner): GridCell[] {
+  return cells.filter(c => c.owner === owner);
+}
+
+/**
+ * Get the 4 orthogonal neighbors (cross pattern)
+ */
+export function getCrossNeighbors(col: number, row: number): GridCell[] {
+  const neighbors: GridCell[] = [];
+  
+  // Haut
+  const top = getCellAt(col, row - 1);
+  if (top) neighbors.push(top);
+  
+  // Bas
+  const bottom = getCellAt(col, row + 1);
+  if (bottom) neighbors.push(bottom);
+  
+  // Gauche
+  const left = getCellAt(col - 1, row);
+  if (left) neighbors.push(left);
+  
+  // Droite
+  const right = getCellAt(col + 1, row);
+  if (right) neighbors.push(right);
+  
+  return neighbors;
+}
+
+/**
+ * Capture cross neighbors (expansion phase)
+ */
+export function captureCrossNeighbors(col: number, row: number, owner: CellOwner): GridCell[] {
+  const neighbors = getCrossNeighbors(col, row);
+  const captured: GridCell[] = [];
+  
+  for (const neighbor of neighbors) {
+    if (neighbor.owner !== owner) {
+      neighbor.owner = owner;
+      neighbor.isOutpost = false; // Les voisins capturés ne sont pas des avant-postes
+      neighbor.signalStrength = 100;
+      captured.push(neighbor);
+    }
+  }
+  
+  console.log(`[GridManager] Captured ${captured.length} cross neighbors at (${col}, ${row})`);
+  return captured;
 }
