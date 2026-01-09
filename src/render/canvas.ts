@@ -81,7 +81,8 @@ export function getCanvasContext(): CanvasContext {
  * Clear the canvas with the paper background color
  */
 export function clearCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-  ctx.fillStyle = COLORS.paper;
+  // Fond papier #F5F2E8 (Bloc 0.2 - Sprint 0)
+  ctx.fillStyle = '#F5F2E8';
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -133,18 +134,53 @@ export function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: n
 }
 
 /**
- * Apply paper grain texture (subtle noise)
+ * Apply paper grain texture (subtle noise) - Bloc 0.2
+ * Optimized version using an off-screen canvas for better performance
  */
-export function applyGrain(ctx: CanvasRenderingContext2D, width: number, height: number, intensity: number = 0.03): void {
-  const imageData = ctx.getImageData(0, 0, width * (window.devicePixelRatio || 1), height * (window.devicePixelRatio || 1));
-  const data = imageData.data;
+let grainCanvas: HTMLCanvasElement | null = null;
+let grainCtx: CanvasRenderingContext2D | null = null;
 
-  for (let i = 0; i < data.length; i += 4) {
-    const noise = (Math.random() - 0.5) * intensity * 255;
-    data[i] = Math.min(255, Math.max(0, data[i] + noise));     // R
-    data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise)); // G
-    data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise)); // B
+export function applyGrain(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  intensity: number = 0.025
+): void {
+  const dpr = window.devicePixelRatio || 1;
+  const actualWidth = Math.floor(width * dpr);
+  const actualHeight = Math.floor(height * dpr);
+
+  // Create grain canvas once
+  if (!grainCanvas || grainCanvas.width !== actualWidth || grainCanvas.height !== actualHeight) {
+    grainCanvas = document.createElement('canvas');
+    grainCanvas.width = actualWidth;
+    grainCanvas.height = actualHeight;
+    grainCtx = grainCanvas.getContext('2d', { willReadFrequently: true });
+
+    if (grainCtx) {
+      // Generate grain pattern
+      const imageData = grainCtx.createImageData(actualWidth, actualHeight);
+      const data = imageData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const noise = (Math.random() - 0.5) * intensity * 255;
+        const baseColor = 245; // #F5F2E8 base
+        data[i] = Math.min(255, Math.max(0, baseColor + noise));     // R
+        data[i + 1] = Math.min(255, Math.max(0, baseColor + noise)); // G
+        data[i + 2] = Math.min(255, Math.max(0, baseColor + noise)); // B
+        data[i + 3] = 255; // Full opacity
+      }
+
+      grainCtx.putImageData(imageData, 0, 0);
+    }
   }
 
-  ctx.putImageData(imageData, 0, 0);
+  // Draw grain overlay with multiply blend mode for NASA-Punk texture
+  if (grainCanvas) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(grainCanvas, 0, 0, width, height);
+    ctx.restore();
+  }
 }

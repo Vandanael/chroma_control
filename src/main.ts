@@ -10,7 +10,7 @@
 
 import { initCanvas } from './render/canvas';
 import { initTouchInput, onTouchEnd, onUnitChange } from './input/touch';
-import { startEngine, addReleasedAnimation } from './render/engine';
+import { startEngine } from './render/engine';
 import { UnitType } from './types';
 import {
   debugEndMatch,
@@ -120,8 +120,8 @@ function wireUiLayers(): void {
       incrementScore(state.detectedUnit);
     }
 
-    // Effet visuel "released"
-    addReleasedAnimation(state.x, state.y, state.detectedUnit);
+    // TODO: Effet visuel "released" (sera réimplémenté avec Voronoi)
+    // addReleasedAnimation(state.x, state.y, state.detectedUnit);
 
     // Règle simple de fin de match pour Sprint 0 :
     // après 10 interactions productives, on bascule en REPLAY

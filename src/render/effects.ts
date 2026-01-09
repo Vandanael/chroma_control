@@ -297,6 +297,188 @@ export function getUnitColor(unitType: UnitType): string {
 }
 
 // =============================================================================
+// VORONOI CELLS - ORGANIC SYSTEM (Bloc 1.1)
+// =============================================================================
+
+/**
+ * Draw a Voronoi cell with plotter-style animation
+ * @param ctx - Canvas context
+ * @param polygon - Array of points forming the cell boundary
+ * @param progress - Animation progress (0-1)
+ * @param color - Stroke color
+ * @param fillColor - Optional fill color (for signal strength gradient)
+ */
+export function drawVoronoiCell(
+  ctx: CanvasRenderingContext2D,
+  polygon: { x: number; y: number }[],
+  progress: number,
+  color: string = COLORS.ink,
+  fillColor?: string
+): void {
+  if (polygon.length < 3) return;
+
+  ctx.save();
+
+  // Fill with signal strength gradient (if provided)
+  if (fillColor && progress > 0.3) {
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.moveTo(polygon[0].x, polygon[0].y);
+    for (let i = 1; i < polygon.length; i++) {
+      ctx.lineTo(polygon[i].x, polygon[i].y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Draw cell border with plotter animation
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Calculate total perimeter
+  let totalLength = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const p1 = polygon[i];
+    const p2 = polygon[(i + 1) % polygon.length];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    totalLength += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  const targetLength = totalLength * progress;
+  let drawnLength = 0;
+
+  ctx.beginPath();
+  ctx.moveTo(polygon[0].x, polygon[0].y);
+
+  for (let i = 0; i < polygon.length && drawnLength < targetLength; i++) {
+    const p1 = polygon[i];
+    const p2 = polygon[(i + 1) % polygon.length];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const segmentLength = Math.sqrt(dx * dx + dy * dy);
+
+    if (drawnLength + segmentLength <= targetLength) {
+      // Draw full segment
+      ctx.lineTo(p2.x, p2.y);
+      drawnLength += segmentLength;
+    } else {
+      // Draw partial segment
+      const remaining = targetLength - drawnLength;
+      const t = remaining / segmentLength;
+      ctx.lineTo(p1.x + dx * t, p1.y + dy * t);
+      drawnLength = targetLength;
+    }
+  }
+
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Create radial gradient for signal strength visualization
+ * @param ctx - Canvas context
+ * @param center - Cell center point
+ * @param radius - Approximate cell radius
+ * @param owner - Cell owner
+ * @param strength - Signal strength (0-100)
+ * @returns CanvasGradient
+ */
+export function createSignalGradient(
+  ctx: CanvasRenderingContext2D,
+  center: { x: number; y: number },
+  radius: number,
+  owner: 'player' | 'enemy',
+  strength: number
+): CanvasGradient {
+  const gradient = ctx.createRadialGradient(
+    center.x, center.y, 0,
+    center.x, center.y, radius
+  );
+
+  const baseColor = owner === 'player' ? COLORS.player : COLORS.enemy;
+  const alpha = (strength / 100) * 0.3; // Max 30% opacity
+
+  gradient.addColorStop(0, baseColor.replace(')', `, ${alpha})`).replace('rgb', 'rgba'));
+  gradient.addColorStop(1, baseColor.replace(')', ', 0)').replace('rgb', 'rgba'));
+
+  return gradient;
+}
+
+/**
+ * Draw technical hatching for reinforced cells (Deep Click)
+ * @param ctx - Canvas context
+ * @param polygon - Cell polygon
+ * @param owner - Cell owner (determines hatch angle)
+ * @param progress - Animation progress (0-1)
+ */
+export function drawCellReinforcement(
+  ctx: CanvasRenderingContext2D,
+  polygon: { x: number; y: number }[],
+  owner: 'player' | 'enemy',
+  progress: number
+): void {
+  if (polygon.length < 3) return;
+
+  ctx.save();
+
+  // Clip to cell polygon
+  ctx.beginPath();
+  ctx.moveTo(polygon[0].x, polygon[0].y);
+  for (let i = 1; i < polygon.length; i++) {
+    ctx.lineTo(polygon[i].x, polygon[i].y);
+  }
+  ctx.closePath();
+  ctx.clip();
+
+  // Hatch angle: 45° for player, -45° for enemy
+  const angle = owner === 'player' ? Math.PI / 4 : -Math.PI / 4;
+  const spacing = 6; // 6px spacing as per PRD
+
+  // Bounding box
+  const xs = polygon.map(p => p.x);
+  const ys = polygon.map(p => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const diagonal = Math.sqrt(width * width + height * height);
+
+  // Draw hatching
+  ctx.strokeStyle = owner === 'player' ? COLORS.player : COLORS.enemy;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.6 * progress;
+
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const totalLines = Math.ceil(diagonal / spacing);
+  const linesToDraw = Math.floor(totalLines * progress);
+
+  for (let i = 0; i < linesToDraw; i++) {
+    const offset = i * spacing - diagonal / 2;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const startX = centerX + offset * cos - diagonal * sin;
+    const startY = centerY + offset * sin + diagonal * cos;
+    const endX = centerX + offset * cos + diagonal * sin;
+    const endY = centerY + offset * sin - diagonal * cos;
+
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// =============================================================================
 // TRIANGLES - HACHURES (Sprint 5)
 // =============================================================================
 
