@@ -1,5 +1,6 @@
 # --- Chroma Control Docs ---
 .claude/
+.docs/
 *.md
 !README.md
 

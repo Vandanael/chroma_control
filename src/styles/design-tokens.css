@@ -1,0 +1,507 @@
+/**
+ * Design Tokens - Chroma Control
+ * Style Minimaliste Organique Enfant-Friendly
+ * Inspiration : Monument Valley, Alto's Odyssey, Toca Boca
+ */
+
+/* =============================================================================
+   TYPOGRAPHIE (Nunito - Arrondie et Friendly)
+   ============================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  /* Font Family */
+  --font-family: 'Nunito', 'Quicksand', system-ui, -apple-system, sans-serif;
+  
+  /* Font Sizes - Scale généreuse pour enfants */
+  --text-xs: 0.75rem;    /* 12px - Micro labels */
+  --text-sm: 0.875rem;   /* 14px - Labels secondaires */
+  --text-base: 1.125rem; /* 18px - Corps (plus grand que standard) */
+  --text-lg: 1.5rem;     /* 24px - Sous-titres */
+  --text-xl: 2rem;       /* 32px - Titres */
+  --text-2xl: 2.75rem;   /* 44px - Scores, timers */
+  --text-3xl: 4rem;      /* 64px - Gros chiffres hero */
+  
+  /* Font Weights - Toujours ≥500 pour contraste sur fond sombre */
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  --font-extrabold: 800;
+  --font-black: 900;
+  
+  /* Line Heights */
+  --leading-tight: 1.1;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.75;
+}
+
+/* =============================================================================
+   COULEURS (Système 60-30-10)
+   ============================================================================= */
+
+:root {
+  /* 60% - Fond Sombre Immersif */
+  --color-bg-deep: #0a0a0f;           /* Noir bleuté profond */
+  --color-bg-surface: #12121a;        /* Surface légèrement plus claire */
+  --color-bg-elevated: #1a1a24;       /* Cartes élevées */
+  
+  /* 30% - Surfaces UI (Glass-morphism Sombre) */
+  --color-glass: rgba(255, 255, 255, 0.05);
+  --color-glass-hover: rgba(255, 255, 255, 0.08);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-glass-border-strong: rgba(255, 255, 255, 0.15);
+  
+  /* 10% - Couleurs Joueur (Dynamiques selon sélection) */
+  --color-cyan: #00F3FF;              /* RGB(0, 243, 255) */
+  --color-green: #00FF88;             /* RGB(0, 255, 136) */
+  --color-amber: #FFAA00;             /* RGB(255, 170, 0) */
+  
+  /* Couleur Active (change selon sélection) */
+  --color-active: var(--color-cyan);  /* Par défaut Cyan */
+  --color-active-glow: rgba(0, 243, 255, 0.25);
+  --color-active-glow-strong: rgba(0, 243, 255, 0.4);
+  
+  /* Feedback États */
+  --color-success: #00FF88;           /* Vert */
+  --color-warning: #FFAA00;           /* Ambre */
+  --color-danger: #FF4466;            /* Rouge */
+  --color-info: #00F3FF;              /* Cyan */
+  
+  /* Étoiles */
+  --color-star-empty: rgba(255, 255, 255, 0.2);
+  --color-star-filled: #FFD700;       /* Or */
+  
+  /* Textes */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  --color-text-tertiary: rgba(255, 255, 255, 0.5);
+  --color-text-disabled: rgba(255, 255, 255, 0.3);
+}
+
+/* =============================================================================
+   ESPACEMENTS (Généreux pour enfants)
+   ============================================================================= */
+
+:root {
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 20px;
+  --space-lg: 32px;
+  --space-xl: 48px;
+  --space-2xl: 64px;
+  --space-3xl: 80px;
+  --space-4xl: 120px;
+}
+
+/* =============================================================================
+   BORDER RADIUS (Formes Organiques Blob)
+   ============================================================================= */
+
+:root {
+  /* Rayons standards */
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --radius-xl: 40px;
+  --radius-full: 9999px;
+  
+  /* Formes Blob Organiques (signature visuelle) */
+  --radius-blob-1: 50% 40% 60% 50% / 40% 50% 40% 60%;
+  --radius-blob-2: 40% 60% 50% 50% / 50% 40% 60% 40%;
+  --radius-blob-3: 60% 50% 40% 50% / 50% 60% 50% 40%;
+  --radius-blob-4: 45% 55% 50% 50% / 50% 50% 45% 55%;
+}
+
+/* =============================================================================
+   TOUCH TARGETS (Enfant-Friendly)
+   ============================================================================= */
+
+:root {
+  /* Tailles minimales (plus grand que standard adulte 48px) */
+  --touch-min: 56px;          /* Minimum absolu */
+  --touch-comfortable: 64px;  /* Confortable */
+  --touch-large: 72px;        /* Gros boutons */
+  --touch-hero: 80px;         /* CTA principal */
+  
+  /* Espacements entre touch targets */
+  --touch-gap-min: 16px;      /* Minimum entre boutons */
+  --touch-gap-comfortable: 20px;
+}
+
+/* =============================================================================
+   OMBRES & GLOWS (Organiques, Colorés)
+   ============================================================================= */
+
+:root {
+  /* Ombres diffuses */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  
+  /* Glows colorés (dynamiques selon couleur active) */
+  --glow-sm: 0 0 10px var(--color-active-glow);
+  --glow-md: 0 0 20px var(--color-active-glow);
+  --glow-lg: 0 0 40px var(--color-active-glow);
+  --glow-xl: 0 0 60px var(--color-active-glow);
+  
+  /* Inset glow (effet orbe) */
+  --glow-inset: inset 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+/* =============================================================================
+   TRANSITIONS & ANIMATIONS
+   ============================================================================= */
+
+:root {
+  /* Durées */
+  --duration-fast: 0.15s;
+  --duration-normal: 0.25s;
+  --duration-slow: 0.4s;
+  --duration-slower: 0.6s;
+  
+  /* Easing curves */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Animations Keyframes */
+@keyframes fadeUp {
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.8); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+}
+
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes star-bounce {
+  0% { transform: scale(0) rotate(-180deg); }
+  50% { transform: scale(1.3) rotate(10deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { 
+    box-shadow: var(--glow-md); 
+  }
+  50% { 
+    box-shadow: var(--glow-lg); 
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+/* =============================================================================
+   COMPOSANTS DE BASE (Classes utilitaires)
+   ============================================================================= */
+
+/* Bouton Principal (CTA) */
+.btn-primary {
+  /* Sizing enfant */
+  min-height: var(--touch-comfortable);
+  padding: var(--space-md) var(--space-xl);
+  
+  /* Forme blob */
+  border-radius: var(--radius-blob-1);
+  
+  /* Couleur dynamique */
+  background: var(--color-active);
+  color: var(--color-bg-deep);
+  border: none;
+  
+  /* Typo */
+  font-family: var(--font-family);
+  font-size: var(--text-lg);
+  font-weight: var(--font-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  
+  /* Glow */
+  box-shadow: var(--glow-md);
+  
+  /* Interaction */
+  cursor: pointer;
+  transition: 
+    transform var(--duration-fast) var(--ease-out), 
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--glow-lg);
+}
+
+.btn-primary:active {
+  transform: scale(0.95);
+  box-shadow: var(--glow-sm);
+}
+
+/* Bouton Secondaire (Glass) */
+.btn-secondary {
+  min-height: var(--touch-comfortable);
+  padding: var(--space-md) var(--space-xl);
+  
+  border-radius: var(--radius-blob-2);
+  
+  background: var(--color-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-glass-border);
+  
+  font-family: var(--font-family);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  
+  cursor: pointer;
+  transition: 
+    background var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.btn-secondary:hover {
+  background: var(--color-glass-hover);
+  border-color: var(--color-glass-border-strong);
+}
+
+.btn-secondary:active {
+  transform: scale(0.95);
+}
+
+/* Bouton Icône */
+.btn-icon {
+  width: var(--touch-min);
+  height: var(--touch-min);
+  padding: 0;
+  
+  border-radius: var(--radius-full);
+  
+  background: var(--color-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--color-glass-border);
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btn-icon:active {
+  transform: scale(0.9);
+}
+
+/* Card (pour niveaux, stats) */
+.card {
+  background: var(--color-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  
+  transition: 
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
+}
+
+.card:hover {
+  border-color: var(--color-active);
+}
+
+.card:active {
+  transform: scale(0.98);
+}
+
+/* Orbe (cercle parfait avec glow) */
+.orb {
+  border-radius: var(--radius-full);
+  box-shadow: 
+    var(--glow-lg),
+    var(--glow-inset);
+}
+
+/* Sélecteur de couleur */
+.color-option {
+  width: var(--touch-min);
+  height: var(--touch-min);
+  border-radius: var(--radius-full);
+  border: 3px solid transparent;
+  cursor: pointer;
+  
+  transition: 
+    transform var(--duration-normal) var(--ease-bounce),
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.color-option:hover {
+  transform: scale(1.05);
+}
+
+.color-option.selected {
+  transform: scale(1.15);
+  border-color: var(--color-text-primary);
+  box-shadow: 0 0 25px currentColor;
+}
+
+.color-option.cyan { background: var(--color-cyan); }
+.color-option.green { background: var(--color-green); }
+.color-option.amber { background: var(--color-amber); }
+
+/* =============================================================================
+   UTILITAIRES
+   ============================================================================= */
+
+/* Layout */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+
+/* Texte */
+.text-center { text-align: center; }
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-active { color: var(--color-active); }
+
+/* Animations */
+.fade-up {
+  animation: fadeUp var(--duration-slow) var(--ease-out);
+}
+
+.scale-in {
+  animation: scaleIn var(--duration-normal) var(--ease-out);
+}
+
+/* =============================================================================
+   ACCESSIBILITÉ
+   ============================================================================= */
+
+/* Respecter la préférence utilisateur pour les animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visible (clavier) */
+*:focus-visible {
+  outline: 2px solid var(--color-active);
+  outline-offset: 4px;
+}
+
+/* =============================================================================
+   RESPONSIVE (Mobile Portrait 1080×1920)
+   ============================================================================= */
+
+:root {
+  /* Safe area (pour notch iOS) */
+  --safe-area-top: env(safe-area-inset-top, 0);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0);
+  --safe-area-left: env(safe-area-inset-left, 0);
+  --safe-area-right: env(safe-area-inset-right, 0);
+}
+
+/* Canvas PixiJS */
+#game-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-deep);
+  z-index: 100;
+}
+
+/* =============================================================================
+   VARIANTES DE COULEURS (Cyan, Green, Amber)
+   ============================================================================= */
+
+/* Cyan (par défaut) */
+:root[data-player-color="cyan"] {
+  --color-active: var(--color-cyan);
+  --color-active-glow: rgba(0, 243, 255, 0.25);
+  --color-active-glow-strong: rgba(0, 243, 255, 0.4);
+}
+
+/* Green */
+:root[data-player-color="green"] {
+  --color-active: var(--color-green);
+  --color-active-glow: rgba(0, 255, 136, 0.25);
+  --color-active-glow-strong: rgba(0, 255, 136, 0.4);
+}
+
+/* Amber */
+:root[data-player-color="amber"] {
+  --color-active: var(--color-amber);
+  --color-active-glow: rgba(255, 170, 0, 0.25);
+  --color-active-glow-strong: rgba(255, 170, 0, 0.4);
+}
+
+/* =============================================================================
+   NOTES DE DESIGN
+   ============================================================================= */
+
+/*
+  RÈGLES CLÉS ENFANT-FRIENDLY :
+  
+  1. Touch Targets : Toujours ≥ 56px
+  2. Espacement entre boutons : ≥ 16px
+  3. Font-weight : Toujours ≥ 500 (contraste sur fond sombre)
+  4. Font-size : Plus grand que standard (+25%)
+  5. Formes : Toujours arrondies (blob > rectangle)
+  6. Couleurs : Vives mais pas agressives
+  7. Feedback : Immédiat (scale + glow)
+  8. Animations : Douces mais perceptibles
+  9. Labels : Texte + icône (redondance pour pré-lecteurs)
+  10. Zones grip : Pas de boutons trop proches des bords
+  
+  INSPIRATION VISUELLE :
+  - Monument Valley : Épuré, formes douces, couleurs vives sur sombre
+  - Alto's Odyssey : Glow subtils, animations fluides
+  - Toca Boca : Gros boutons, couleurs saturées, formes organiques
+*/

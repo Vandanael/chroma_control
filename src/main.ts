@@ -1,511 +1,830 @@
 /**
  * Chroma Control - Main Entry Point
- * Bio-Digital Edition
+ * Organic Paint - MVP
  */
 
-import { initCanvas } from './render/canvas';
-import { initTouchInput, onTouchEnd, onUnitChange } from './input/touch';
-import { initUnifiedInput } from './input/unifiedInput';
-import { initSafeAreas } from './utils/safeAreas';
-import { startEngine } from './render/engine';
-import { clearRenderCaches } from './render/optimizedWorldRenderer';
-import { clearEphemeralConnections } from './render/ephemeralConnections';
-import { UnitType } from './types';
-import {
-  debugEndMatch,
-  getScore,
-  incrementScore,
-  onGameStateChange,
-  resetScore,
-  setGameState,
-  startTimer,
-  stopTimer,
-  getGameResult,
-} from './game/state';
-import { setAIEnabled, initAI } from './game/ai';
-import { resetNodeSystem } from './game/nodeManager';
-import { clearAllSyringes } from './render/syringeRenderer';
-import { setPlayerColor } from './game/playerColor';
-import { PlayerColor, getPlayerColor as getPlayerColorFromConstants, COLORS } from './game/constants';
-import { initOrbAnimation, setOrbHoverColor, triggerOrbZoom } from './render/orbAnimation';
-import { initOrbitView } from './ui/orbitView';
-import { getVictoryMessage, DEFEAT_MESSAGE, getRandomLoadingMessage } from './narrative/lore';
-import { getSelectedColorType, getPlayerColorValue } from './game/playerColor';
-import { initVictoryNotification, resetVictoryNotification } from './ui/victoryNotification';
-import { RENDERING_CONFIG, UI_CONFIG } from './config';
-// PROTOTYPE : testNodeTypes désactivé (types simplifiés)
-// import { testNodeTypes } from './game/nodeTypes';
-// PROTOTYPE : Node Type Selector désactivé
-// import { initNodeTypeSelector } from './ui/nodeTypeSelector';
+import { initOrbAnimation, setOrbHoverColor, cleanupOrbAnimation } from './render/orbAnimation';
+import { game, GameState } from '@core/Game';
+import { inputManager, InputEvent } from '@core/InputManager';
+import { loop } from '@core/Loop';
+import { PaintSystem } from '@systems/PaintSystem';
+import { Level } from '@entities/Level';
+import { PressureTank } from '@entities/PressureTank';
+import { HUD } from '@ui/HUD';
+import { GameOverScreen } from '@ui/GameOverScreen';
+import { LevelSelectScreen } from '@ui/LevelSelectScreen';
+import { TutorialOverlay } from '@ui/TutorialOverlay'; // ✅ Tutoriel interactif
+import { ScoringSystem } from '@systems/ScoringSystem';
+import { calculateStars } from '@systems/StarSystem';
+import { loadProgression, updateLevelProgress, type PlayerProgression } from '@systems/ProgressionSystem';
+import { audioSystem } from '@systems/AudioSystem';
+import { haptics } from '@utils/Haptics';
+import { pixelCounter } from '@utils/PixelCounter';
+import { PlayerColorName } from '@utils/Constants';
+import { Container } from 'pixi.js';
+
+// =============================================================================
+// STATE
+// =============================================================================
+
+let selectedColor: PlayerColorName = 'CYAN';
+let selectedLevelId = 1; // Niveau sélectionné
+let playerProgression: PlayerProgression | null = null;
+let gameInitialized = false;
+let paintSystem: PaintSystem | null = null;
+let currentLevel: Level | null = null;
+let pressureTank: PressureTank | null = null;
+let hud: HUD | null = null;
+let gameOverScreen: GameOverScreen | null = null;
+let levelSelectScreen: LevelSelectScreen | null = null;
+let scoringSystem: ScoringSystem | null = null;
+let gameTimer = 0; // Temps restant en secondes
+let gameStartTime = 0; // Timestamp de début de partie
 
 // =============================================================================
 // INITIALIZATION
 // =============================================================================
 
-// PROTOTYPE : testNodeTypes désactivé
-// (window as any).testNodeTypes = testNodeTypes;
-
 function init(): void {
-  console.log('[Chroma Control] Initializing Bio-Digital Edition...');
+  console.log('[Chroma Control] Initializing...');
 
-  // Initialize Canvas
-  const canvasContext = initCanvas('game-canvas');
-  console.log(
-    `[Canvas] Initialized at ${canvasContext.width}x${canvasContext.height} (DPR: ${canvasContext.dpr})`,
-  );
+  // Charger la progression du joueur
+  playerProgression = loadProgression();
+  console.log('[Progression] Loaded:', playerProgression);
 
-  // Initialize Input Systems
-  initTouchInput(canvasContext.canvas);
+  // ✅ Vérifier si premier lancement (tutoriel)
+  const hasSeenTutorial = localStorage.getItem('chroma_tutorial_seen');
+  if (!hasSeenTutorial) {
+    console.log('[Tutorial] First launch detected');
+    // Le tutoriel sera affiché après initialisation du game
+  }
 
-  // Initialiser le système d'input unifié (PointerEvents)
-  initUnifiedInput(canvasContext.canvas);
-  
-  // Initialiser les safe areas (notch, barres de navigation)
-  initSafeAreas();
-  console.log('[Input] Free-form placement system initialized');
-
-  // Start Render Engine
-  startEngine(canvasContext);
-  console.log('[Engine] Render loop started');
-
-  // Wire UI Layers (doit être appelé avant setGameState pour que le listener soit enregistré)
-  // Utiliser requestAnimationFrame pour s'assurer que le DOM est prêt
-  requestAnimationFrame(async () => {
-    wireUiLayers();
-
-    // DÉSACTIVÉ : Ancienne interface Chroma Control (remplacée par design minimaliste)
-    // import('./ui/chromaControlInterface').then(({ initChromaControlInterface }) => {
-    //   initChromaControlInterface();
-    // });
-    
-    // Initialiser l'animation de l'orbe (minimaliste retro-futur)
-    // Attendre que le DOM soit complètement chargé
+  // Initialiser l'animation de l'orbe
+  requestAnimationFrame(() => {
     setTimeout(() => {
       initOrbAnimation('planet-animation-container');
+      console.log('[Orb] Animation initialized');
     }, 100);
-    
-    // Initialiser Orbit View
-    initOrbitView();
-    
-    // Initialiser Victory Notification
-    initVictoryNotification();
-    
-    // Initialiser FLUX UI
-    import('./ui/fluxUI').then(({ initFluxUI }) => {
-      initFluxUI();
-    });
-    
-    // DÉSACTIVÉ : Double-Tap Tutorial (sera réactivé plus tard quand mieux conçu)
-    // import('./ui/doubleTapTutorial').then(({ initDoubleTapTutorial }) => {
-    //   initDoubleTapTutorial();
-    // });
-    
-    // PROTOTYPE : Node Type Selector désactivé (nœud unique 'Chroma Node')
-    // initNodeTypeSelector();
-    
-    // Initialiser l'audio (asynchrone, ne bloque pas le rendu)
-    const { initAudio } = await import('./audio/audioManager');
-    initAudio().catch(err => {
-      console.warn('[Audio] Failed to initialize audio:', err);
-    });
-    
-    // Afficher un message de chargement aléatoire dans la console
-    console.log(`%c${getRandomLoadingMessage()}`, 'color: #00F3FF; font-size: 12px; font-family: monospace;');
-    
-    // État initial : START (après avoir enregistré le listener)
-    setGameState('START');
-    
-    console.log('[Chroma Control] Bio-Digital Edition Ready!');
   });
+
+  // Wire UI pour les boutons de couleur et le bouton START
+  wireStartScreen();
+  
+  // Écouter les changements d'état du jeu
+  game.onStateChange(handleGameStateChange);
 }
 
 // =============================================================================
-// UI LAYERS (START / REPLAY / DEBUG)
+// UI WIRING
 // =============================================================================
 
-function wireUiLayers(): void {
-  console.log('[wireUiLayers] Starting UI wiring...');
-  const body = document.body;
-  const startScreen = document.getElementById('start-screen');
-  const gameOverScreen = document.getElementById('game-over-screen');
-  const replayScreen = document.getElementById('replay-screen');
-  const startButton = document.getElementById('btn-initiate-signal');
-  const rebootButton = document.getElementById('btn-reboot-system');
-  const replayButton = document.getElementById('btn-replay-signal');
-  const replayGameButton = document.getElementById('btn-replay-game');
-  const backToMenuButton = document.getElementById('btn-back-to-menu');
-  const debugEndButton = document.getElementById('btn-debug-end');
-  const replayScoreEl = document.getElementById('replay-score');
-  const gameOverTitleEl = document.getElementById('game-over-title');
-  const gameOverMessageEl = document.getElementById('game-over-message');
-  const statScoreEl = document.getElementById('stat-score');
-  const statDurationEl = document.getElementById('stat-duration');
-  const statNodesEl = document.getElementById('stat-nodes');
-  
-  // Boutons de sélection de couleur
+function wireStartScreen(): void {
   const colorButtons = document.querySelectorAll('.color-button');
-  const cyanButton = document.getElementById('btn-color-cyan');
-  
-  console.log('[wireUiLayers] Elements found:', {
-    startScreen: !!startScreen,
-    startButton: !!startButton,
-    colorButtons: colorButtons.length,
-    cyanButton: !!cyanButton,
-  });
-  
-  // Fonction pour mettre à jour le bouton START et le titre avec la couleur sélectionnée (minimaliste)
-  function updateStartButtonColor(color: PlayerColor): void {
-    if (!startButton) return;
-    const colorValue = color === 'CYAN' ? '#00F3FF' : color === 'GREEN' ? '#00FF88' : '#FFAA00';
-    const button = startButton as HTMLElement;
-    const titleEl = document.getElementById('start-title');
+
+  // Mapping des couleurs
+  const colorMap: Record<PlayerColorName, string> = {
+    CYAN: '#00F3FF',
+    GREEN: '#00FF88',
+    AMBER: '#FFAA00'
+  };
+
+  colorButtons.forEach((btn) => {
+    const colorValue = (btn as HTMLElement).style.color;
     
-    // Mettre à jour le bouton START (pas de glow)
-    button.style.borderColor = colorValue;
-    button.style.color = colorValue;
-    button.style.boxShadow = 'none';
-    
-    // Hover : fond rempli à 10%
-    button.onmouseenter = () => {
-      button.style.background = `${colorValue}1A`; // 10% opacité
-    };
-    button.onmouseleave = () => {
-      button.style.background = 'transparent';
-    };
-    
-    // Mettre à jour le titre (pas de glow, pas d'ombre)
-    if (titleEl) {
-      titleEl.style.color = colorValue;
-      titleEl.style.textShadow = 'none';
-    }
-    
-    // Mettre à jour le gradient radial du fond (3-5% opacité max)
-    const overlay = startScreen as HTMLElement;
-    if (overlay) {
-      const r = parseInt(colorValue.slice(1, 3), 16);
-      const g = parseInt(colorValue.slice(3, 5), 16);
-      const b = parseInt(colorValue.slice(5, 7), 16);
-      overlay.style.backgroundImage = `
-        radial-gradient(circle at center, rgba(${r}, ${g}, ${b}, 0.04) 0%, transparent 70%),
-        url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E")
-      `;
-    }
-  }
-  
-  // Sélection de couleur
-  colorButtons.forEach(button => {
-    const buttonEl = button as HTMLElement;
-    const color = buttonEl.dataset.color as PlayerColor;
-    
-    // Hover : changer la couleur de l'orbe
-    button.addEventListener('mouseenter', () => {
-      const colorValue = getPlayerColorFromConstants(color);
+    // Survol : changer la couleur de l'orbe temporairement
+    btn.addEventListener('mouseenter', () => {
       setOrbHoverColor(colorValue);
     });
     
-    button.addEventListener('mouseleave', () => {
-      setOrbHoverColor(null);
+    btn.addEventListener('mouseleave', () => {
+      // Revenir à la couleur sélectionnée
+      setOrbHoverColor(colorMap[selectedColor]);
     });
     
-    // Click : sélectionner la couleur
-    button.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    // Clic : sélectionner la couleur
+    btn.addEventListener('click', () => {
+      colorButtons.forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedColor = ((btn as HTMLElement).dataset.color || 'CYAN') as PlayerColorName;
+      console.log('[UI] Color selected:', selectedColor);
       
-      // Sanitisation : valider la couleur avant traitement (protection XSS)
-      const validColors: PlayerColor[] = ['CYAN', 'GREEN', 'AMBER'];
-      if (!validColors.includes(color as PlayerColor)) {
-        console.warn('[Security] Invalid color selection attempted:', color);
-        return;
-      }
+      // Mettre à jour l'orbe avec la couleur sélectionnée
+      setOrbHoverColor(colorMap[selectedColor]);
       
-      console.log('[StartScreen] Color button clicked:', color);
-      setPlayerColor(color);
-      
-      // Mettre à jour l'état visuel des boutons
-      colorButtons.forEach(btn => btn.classList.remove('selected'));
-      button.classList.add('selected');
-      
-      // Mettre à jour le bouton START et l'orbe
-      updateStartButtonColor(color);
-      const colorValue = getPlayerColorFromConstants(color);
-      setOrbHoverColor(colorValue);
+      // Mettre à jour la couleur du bouton START
+      updateStartButtonColor();
     });
   });
-  
+
   // Sélectionner CYAN par défaut
+  const cyanButton = document.getElementById('btn-color-cyan');
   if (cyanButton) {
     cyanButton.classList.add('selected');
-    updateStartButtonColor('CYAN');
-    // Mettre à jour le gradient radial du fond au chargement
-    const overlay = startScreen as HTMLElement;
-    if (overlay) {
-      overlay.style.backgroundImage = `
-        radial-gradient(circle at center, rgba(0, 243, 255, 0.04) 0%, transparent 70%),
-        url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E")
-      `;
-    }
-    console.log('[StartScreen] Default color (CYAN) selected');
-  } else {
-    console.warn('[StartScreen] Cyan button not found!');
+  }
+
+  // Bouton START -> ouvre la sélection de niveaux
+  const startButton = document.getElementById('btn-start');
+  if (startButton) {
+    startButton.addEventListener('click', handleSelectLevelClick);
   }
   
-  // Vérifier que les boutons sont bien trouvés
-  console.log('[StartScreen] Color buttons found:', colorButtons.length);
-  console.log('[StartScreen] Start button found:', !!startButton);
-
-  // Reflect game state in DOM (data attribute + visibility)
-  onGameStateChange((state, score) => {
-    body.setAttribute('data-game-state', state);
-
-    // Afficher/masquer les écrans
-    if (startScreen) {
-      const isVisible = state === 'START';
-      (startScreen as HTMLElement).style.display = isVisible ? 'flex' : 'none';
-      
-      // L'animation est déjà initialisée dans init(), pas besoin de la réinitialiser ici
-    }
+  // Bouton DEBUG -> vider le cache
+  const debugButton = document.getElementById('btn-debug-cache');
+  if (debugButton) {
+    debugButton.addEventListener('click', () => {
+      if (confirm('Vider le cache et recharger la page ?')) {
+        console.log('[Debug] Clearing localStorage...');
+        localStorage.clear();
+        console.log('[Debug] Reloading...');
+        window.location.reload();
+      }
+    });
     
-    // Désactiver les événements pointer sur le canvas quand on n'est pas en jeu
-    const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-    if (canvas) {
-      if (state === 'PLAYING') {
-        canvas.style.pointerEvents = 'auto';
+    debugButton.addEventListener('mouseenter', (e) => {
+      (e.target as HTMLElement).style.background = 'rgba(255, 68, 102, 0.3)';
+      (e.target as HTMLElement).style.transform = 'scale(1.1)';
+    });
+    
+    debugButton.addEventListener('mouseleave', (e) => {
+      (e.target as HTMLElement).style.background = 'rgba(255, 68, 102, 0.2)';
+      (e.target as HTMLElement).style.transform = 'scale(1)';
+    });
+  }
+  
+  // =========================================================================
+  // SETTINGS TOGGLES
+  // =========================================================================
+  setupSettingsToggles();
+}
+
+/**
+ * ✅ Configure les toggles de settings (Leaderboard, Langue, Dark Mode)
+ */
+function setupSettingsToggles(): void {
+  // Charger les settings depuis localStorage
+  const settings = {
+    leaderboard: localStorage.getItem('chroma_leaderboard') === 'true',
+    language: localStorage.getItem('chroma_language') || 'FR',
+    darkmode: localStorage.getItem('chroma_darkmode') === 'true'
+  };
+  
+  console.log('[Settings] Loaded:', settings);
+  
+  // Appliquer les settings initiaux
+  applySettings(settings);
+  
+  // Toggle Leaderboard
+  const leaderboardToggle = document.getElementById('toggle-leaderboard');
+  if (leaderboardToggle) {
+    if (settings.leaderboard) {
+      leaderboardToggle.classList.add('active');
+    }
+    leaderboardToggle.addEventListener('click', () => {
+      leaderboardToggle.classList.toggle('active');
+      const isActive = leaderboardToggle.classList.contains('active');
+      localStorage.setItem('chroma_leaderboard', isActive.toString());
+      console.log('[Settings] Leaderboard:', isActive);
+    });
+  }
+  
+  // Toggle Language
+  const languageToggle = document.getElementById('toggle-language');
+  if (languageToggle) {
+    const langOptions = languageToggle.querySelectorAll('.lang-option');
+    langOptions.forEach(opt => {
+      if ((opt as HTMLElement).dataset.lang === settings.language) {
+        opt.classList.add('active');
       } else {
-        canvas.style.pointerEvents = 'none';
+        opt.classList.remove('active');
       }
+    });
+    
+    languageToggle.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('lang-option')) {
+        const newLang = target.dataset.lang || 'FR';
+        langOptions.forEach(opt => opt.classList.remove('active'));
+        target.classList.add('active');
+        localStorage.setItem('chroma_language', newLang);
+        console.log('[Settings] Language:', newLang);
+        applyLanguage(newLang as 'FR' | 'EN');
+      }
+    });
+  }
+  
+  // Toggle Dark Mode
+  const darkmodeToggle = document.getElementById('toggle-darkmode');
+  if (darkmodeToggle) {
+    if (settings.darkmode) {
+      darkmodeToggle.classList.add('active');
     }
-    if (gameOverScreen) {
-      (gameOverScreen as HTMLElement).style.display =
-        state === 'GAME_OVER' ? 'flex' : 'none';
-    }
-    if (replayScreen) {
-      (replayScreen as HTMLElement).style.display =
-        state === 'REPLAY' ? 'flex' : 'none';
-    }
+    darkmodeToggle.addEventListener('click', () => {
+      darkmodeToggle.classList.toggle('active');
+      const isActive = darkmodeToggle.classList.contains('active');
+      localStorage.setItem('chroma_darkmode', isActive.toString());
+      console.log('[Settings] Dark Mode:', isActive);
+      applyDarkMode(isActive);
+      
+      // Changer l'icône
+      const icon = document.getElementById('darkmode-icon');
+      if (icon) {
+        icon.textContent = isActive ? '☀️' : '🌙';
+      }
+    });
+  }
+}
 
-    // Mettre à jour l'écran Game Over selon victoire/défaite
-    if (state === 'GAME_OVER') {
-      // Obtenir les dimensions du canvas pour calcul de saturation
-      const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-      const canvasWidth = canvas?.width || 1920;
-      const canvasHeight = canvas?.height || 1080;
-      const result = getGameResult(canvasWidth, canvasHeight);
-      
-      // Mettre à jour le titre
-      if (gameOverTitleEl) {
-        if (result === 'victory') {
-          gameOverTitleEl.textContent = 'VICTOIRE';
-          gameOverTitleEl.style.color = getPlayerColorValue();
-        } else {
-          gameOverTitleEl.textContent = 'DÉFAITE';
-          gameOverTitleEl.style.color = COLORS.ENEMY;
-        }
-      }
-      
-      // Mettre à jour le message
-      if (gameOverMessageEl) {
-        if (result === 'victory') {
-          const chroma = getSelectedColorType();
-          const victory = getVictoryMessage(chroma);
-          gameOverMessageEl.textContent = victory.message.replace(/<[^>]*>/g, '');
-          gameOverMessageEl.style.color = victory.color;
-        } else {
-          gameOverMessageEl.textContent = DEFEAT_MESSAGE.message.replace(/<[^>]*>/g, '');
-          gameOverMessageEl.style.color = DEFEAT_MESSAGE.color;
-        }
-      }
-      
-      // Mettre à jour les stats
-      import('./game/state').then(({ getElapsedTimeFormatted, getScore }) => {
-        import('./game/territorySystem').then(({ calculateTerritoryPercentage }) => {
-          import('./game/nodeManager').then(({ getNodesByOwner }) => {
-            const elapsed = getElapsedTimeFormatted();
-            const gameScore = getScore();
-            const territory = calculateTerritoryPercentage(canvasWidth, canvasHeight);
-            const playerNodes = getNodesByOwner('player');
-            
-            // Score (% territoire)
-            if (statScoreEl) {
-              statScoreEl.textContent = `${Math.round(territory.player)}%`;
-            }
-            
-            // Durée
-            if (statDurationEl) {
-              statDurationEl.textContent = `${elapsed.minutes}:${elapsed.seconds.toString().padStart(2, '0')}`;
-            }
-            
-            // Nœuds placés
-            if (statNodesEl) {
-              statNodesEl.textContent = `${playerNodes.length}`;
-            }
-          });
-        });
-      });
-      
-      // Mettre à jour les boutons
-      if (replayGameButton) {
-        const colorValue = result === 'victory' ? getPlayerColorValue() : COLORS.ENEMY;
-        replayGameButton.style.borderColor = colorValue;
-        replayGameButton.style.color = colorValue;
-      }
-      
-      if (backToMenuButton) {
-        backToMenuButton.style.borderColor = '#888888';
-        backToMenuButton.style.color = '#888888';
-      }
-      
-      // Fade out audio doux en cas de défaite
-      if (result === 'defeat') {
-        import('./audio/audioManager').then(({ fadeOutAudio }) => {
-          fadeOutAudio(1.0); // Fade out sur 1 seconde
-        });
-      }
-    }
+/**
+ * ✅ Applique tous les settings au démarrage
+ */
+function applySettings(settings: { leaderboard: boolean; language: string; darkmode: boolean }): void {
+  applyLanguage(settings.language as 'FR' | 'EN');
+  applyDarkMode(settings.darkmode);
+  
+  // Update dark mode icon
+  const icon = document.getElementById('darkmode-icon');
+  if (icon) {
+    icon.textContent = settings.darkmode ? '☀️' : '🌙';
+  }
+}
 
-    if (replayScoreEl) {
-      const total = Math.round(score.nexusPoints || 0);
-      replayScoreEl.textContent = `${total.toString().padStart(3, '0')} pts`;
-    }
-  });
+/**
+ * ✅ Applique le mode sombre/clair
+ */
+function applyDarkMode(isDark: boolean): void {
+  const html = document.documentElement;
+  if (isDark) {
+    html.removeAttribute('data-theme'); // Dark est le défaut
+  } else {
+    html.setAttribute('data-theme', 'light');
+  }
+}
 
-  // START → PLAYING avec transition "DIVE" (fondu 0.5s)
-  startButton?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('[StartScreen] START button clicked');
-    if (!startScreen) {
-      console.warn('[StartScreen] Start screen element not found!');
+/**
+ * ✅ Applique la langue (textes de l'interface)
+ */
+function applyLanguage(lang: 'FR' | 'EN'): void {
+  const translations: Record<'FR' | 'EN', Record<string, string>> = {
+    FR: {
+      title: 'CHROMA<br>CONTROL',
+      subtitle: 'expand your color',
+      play: 'JOUER',
+      footer: 'Made by'
+    },
+    EN: {
+      title: 'CHROMA<br>CONTROL',
+      subtitle: 'expand your color',
+      play: 'PLAY',
+      footer: 'Made by'
+    }
+  };
+  
+  const t = translations[lang];
+  
+  // Titre
+  const title = document.getElementById('start-title');
+  if (title) title.innerHTML = t.title;
+  
+  // Bouton
+  const playBtn = document.getElementById('btn-start');
+  if (playBtn) playBtn.textContent = t.play;
+  
+  console.log('[Language] Applied:', lang);
+}
+
+function updateStartButtonColor(): void {
+  const startButton = document.getElementById('btn-start');
+  const colors: Record<PlayerColorName, string> = {
+    CYAN: '#00F3FF',
+    GREEN: '#00FF88',
+    AMBER: '#FFAA00'
+  };
+  
+  if (startButton) {
+    startButton.style.borderColor = colors[selectedColor];
+    startButton.style.color = colors[selectedColor];
+  }
+}
+
+// =============================================================================
+// GAME FLOW
+// =============================================================================
+
+/**
+ * Ouvre l'écran de sélection de niveaux
+ */
+async function handleSelectLevelClick(): Promise<void> {
+  console.log('[UI] Opening level select');
+  
+  if (!playerProgression) return;
+  
+  // Initialiser le jeu si pas encore fait
+  if (!gameInitialized) {
+    const gameContainer = document.getElementById('game-container');
+    
+    if (!gameContainer) {
+      console.error('[Main] Game container not found');
       return;
     }
     
-    // Déclencher l'animation de zoom de l'orbe
-    triggerOrbZoom();
-    
-    // Transition de fondu "DIVE"
-    startScreen.classList.add('fade-out');
-    console.log('[StartScreen] Fade-out transition started');
-    
-    // Attendre la fin de la transition avant de démarrer le jeu
-    setTimeout(() => {
-      console.log('[StartScreen] Starting game...');
-      // Initialiser le Drop-Pod avec la couleur choisie (déjà fait via setPlayerColor)
-      resetScore();
-      resetVictoryNotification();
-      initAI();
-      setAIEnabled(true);
-      startTimer();
-      setGameState('PLAYING');
-    }, RENDERING_CONFIG.diveTransitionDuration);
-  });
-  
-  if (!startButton) {
-    console.error('[StartScreen] START button not found in DOM!');
+    try {
+      await game.init(gameContainer);
+      
+      // Initialiser l'InputManager avec le canvas PixiJS
+      const canvas = game.application?.canvas;
+      if (canvas) {
+        inputManager.init(canvas);
+        inputManager.onInput(handleInput);
+      }
+      
+      // Créer le PressureTank
+      pressureTank = new PressureTank();
+      
+      // Créer le HUD
+      hud = new HUD();
+      hud.setPlayerColor(selectedColor);
+      
+      // Créer le GameOverScreen
+      gameOverScreen = new GameOverScreen();
+      gameOverScreen.setPlayerColor(selectedColor);
+      
+      // Créer le LevelSelectScreen
+      levelSelectScreen = new LevelSelectScreen(
+        playerProgression,
+        handleLevelSelected,
+        handleBackToStart
+      );
+      
+      // Créer le ScoringSystem
+      scoringSystem = new ScoringSystem();
+      
+      // Ajouter le HUD, GameOverScreen et LevelSelectScreen au layer UI
+      const uiLayer = game.application?.stage.children[4];
+      if (uiLayer instanceof Container) {
+        uiLayer.addChild(hud.getContainer());
+        uiLayer.addChild(gameOverScreen.getContainer());
+        uiLayer.addChild(levelSelectScreen);
+      }
+      
+      // Connecter les callbacks du GameOverScreen
+      gameOverScreen.onReplay(() => {
+        handleRestartLevel();
+      });
+      
+      gameOverScreen.onMenu(() => {
+        handleBackToLevelSelect();
+      });
+      
+      gameOverScreen.onNext(() => {
+        handleNextLevel();
+      });
+      
+      // Connecter le PressureTank au HUD
+      pressureTank.onChange((pressure, state) => {
+        hud?.updatePressure(pressure, state);
+      });
+      
+      // Connecter les boutons du HUD
+      hud.onStop(() => {
+        handleBackToLevelSelect();
+      });
+      
+      hud.onReplay(() => {
+        handleRestartLevel();
+      });
+      
+      // Créer le PaintSystem avec le PressureTank
+      paintSystem = new PaintSystem(pressureTank);
+      
+      // Ajouter le callback de mise à jour au loop
+      loop.addCallback(updateGame);
+      
+      gameInitialized = true;
+    } catch (error) {
+      console.error('[Main] Failed to initialize game:', error);
+      return;
+    }
   }
-
-  // GAME OVER → REJOUER (nouveau bouton REJOUER)
-  replayGameButton?.addEventListener('click', () => {
-    resetScore();
-    resetNodeSystem();
-    resetVictoryNotification();
-    clearAllSyringes();
-    clearRenderCaches();
-    clearEphemeralConnections();
-    setAIEnabled(false);
-    stopTimer();
-    // Relancer directement une nouvelle partie
-    setTimeout(() => {
-      initAI();
-      setAIEnabled(true);
-      startTimer();
-      setGameState('PLAYING');
-    }, 100);
-  });
   
-  // GAME OVER → MENU (nouveau bouton MENU)
-  backToMenuButton?.addEventListener('click', () => {
-    resetScore();
-    resetNodeSystem();
-    resetVictoryNotification();
-    clearAllSyringes();
-    clearRenderCaches();
-    clearEphemeralConnections();
-    setAIEnabled(false);
-    stopTimer();
-    setGameState('START');
-  });
+  // Cacher l'écran de start
+  const startScreen = document.getElementById('start-screen');
+  if (startScreen) {
+    startScreen.style.display = 'none';
+  }
   
-  // Legacy: GAME OVER → START (reboot) - gardé pour compatibilité
-  rebootButton?.addEventListener('click', () => {
-    resetScore();
-    resetNodeSystem();
-    resetVictoryNotification();
-    clearAllSyringes();
-    clearRenderCaches();
-    clearEphemeralConnections();
-    setAIEnabled(false);
-    stopTimer();
-    setGameState('START');
-  });
+  // Nettoyer l'animation de l'orbe
+  cleanupOrbAnimation();
+  
+  // Afficher l'écran de sélection
+  if (levelSelectScreen) {
+    levelSelectScreen.visible = true;
+    console.log('[UI] LevelSelectScreen visible:', levelSelectScreen.visible);
+    console.log('[UI] LevelSelectScreen children:', levelSelectScreen.children.length);
+  } else {
+    console.error('[UI] LevelSelectScreen is null!');
+  }
+  
+  // Afficher le container de jeu (pour PixiJS)
+  const gameContainer = document.getElementById('game-container');
+  if (gameContainer) {
+    gameContainer.style.display = 'block';
+    console.log('[UI] Game container displayed');
+  }
+}
 
-  // REPLAY → START (retour à l'écran de démarrage)
-  replayButton?.addEventListener('click', () => {
-    resetScore();
-    resetNodeSystem();
-    resetVictoryNotification();
-    clearAllSyringes();
-    clearRenderCaches();
-    clearEphemeralConnections();
-    setAIEnabled(false);
-    stopTimer();
-    setGameState('START');
-  });
-
-  // Bouton DEBUG pour forcer la fin de match
-  debugEndButton?.addEventListener('click', () => {
-    debugEndMatch();
-  });
-
-  // Touch end → mise à jour du score + éventuelle fin de match auto
-  onTouchEnd((state) => {
-    console.log(
-      `[Touch] End - Duration: ${state.duration.toFixed(
-        0,
-      )}ms, Unit: ${state.detectedUnit}`,
-    );
-
-    if (
-      state.detectedUnit === 'scout' ||
-      state.detectedUnit === 'defender' ||
-      state.detectedUnit === 'attacker'
-    ) {
-      incrementScore(state.detectedUnit);
+/**
+ * ✅ Affiche le tutoriel si premier lancement
+ */
+function showTutorialIfFirstTime(onComplete: () => void): void {
+  const hasSeenTutorial = localStorage.getItem('chroma_tutorial_seen');
+  
+  if (!hasSeenTutorial) {
+    console.log('[Tutorial] Showing tutorial...');
+    const tutorialOverlay = new TutorialOverlay();
+    
+    // Configurer les callbacks
+    const completeHandler = () => {
+      console.log('[Tutorial] Completed');
+      localStorage.setItem('chroma_tutorial_seen', 'true');
+      const uiLayer = game.getLayer('ui');
+      if (uiLayer) {
+        uiLayer.removeChild(tutorialOverlay.getContainer());
+      }
+      onComplete();
+    };
+    
+    tutorialOverlay.setOnComplete(completeHandler);
+    tutorialOverlay.setOnSkip(completeHandler); // Skip = même effet
+    
+    // Ajouter au layer UI
+    const uiLayer = game.getLayer('ui');
+    if (uiLayer) {
+      uiLayer.addChild(tutorialOverlay.getContainer());
+      tutorialOverlay.setPlayerColor(selectedColor);
+      tutorialOverlay.showStep('tap'); // Afficher la première étape
     }
+  } else {
+    console.log('[Tutorial] Already seen, skipping');
+    onComplete();
+  }
+}
 
-    const snapshot = getScore();
-    const interactions =
-      snapshot.taps + snapshot.defenders + snapshot.attackers;
-    if (
-      interactions >= UI_CONFIG.minInteractionsForReplay &&
-      document.body.getAttribute('data-game-state') === 'PLAYING'
-    ) {
-      setGameState('REPLAY');
-    }
-  });
+/**
+ * Lance un niveau spécifique
+ */
+async function handleLevelSelected(levelId: number): Promise<void> {
+  console.log('[UI] Level selected:', levelId);
+  
+  selectedLevelId = levelId;
+  
+  // Cacher l'écran de sélection
+  if (levelSelectScreen) {
+    levelSelectScreen.visible = false;
+  }
+  
+  // ✅ Afficher le tutoriel si premier lancement (niveau 1 uniquement)
+  if (levelId === 1) {
+    showTutorialIfFirstTime(async () => {
+      await startLevel(levelId);
+    });
+  } else {
+    await startLevel(levelId);
+  }
+}
 
-  // Log de changement d'unité (pour ressenti)
-  onUnitChange((unit: UnitType, duration: number) => {
-    console.log(
-      `[Unit] Changed to ${unit.toUpperCase()} at ${duration.toFixed(0)}ms`,
-    );
-  });
+/**
+ * ✅ Démarre réellement le niveau (après tutoriel si applicable)
+ */
+async function startLevel(levelId: number): Promise<void> {
+  // Charger le niveau
+  currentLevel = new Level(levelId);
+  await currentLevel.load();
+  
+  // Définir la couleur du joueur
+  game.setPlayerColor(selectedColor);
+  
+  // Initialiser le timer
+  gameTimer = currentLevel.getConfig().timeLimit;
+  gameStartTime = performance.now();
+  hud?.updateTimer(gameTimer);
+  
+  // Reset la pression
+  pressureTank?.reset();
+  
+  // Clear le paint
+  paintSystem?.clear();
+  
+  // Démarrer le jeu
+  game.start();
+  loop.start();
+}
+
+/**
+ * Retour à l'écran de start
+ */
+function handleBackToStart(): void {
+  console.log('[UI] ========================================');
+  console.log('[UI] BACK TO START SCREEN CALLED');
+  console.log('[UI] ========================================');
+  
+  // Cacher l'écran de sélection
+  if (levelSelectScreen) {
+    levelSelectScreen.visible = false;
+    console.log('[UI] LevelSelectScreen hidden');
+  } else {
+    console.error('[UI] LevelSelectScreen is null!');
+  }
+  
+  // Afficher l'écran de start
+  const startScreen = document.getElementById('start-screen');
+  if (startScreen) {
+    startScreen.style.display = 'flex';
+    console.log('[UI] Start screen displayed');
+  } else {
+    console.error('[UI] Start screen element not found!');
+  }
+  
+  // Cacher le container de jeu
+  const gameContainer = document.getElementById('game-container');
+  if (gameContainer) {
+    gameContainer.style.display = 'none';
+    console.log('[UI] Game container hidden');
+  }
+  
+  // Réinitialiser l'orbe
+  initOrbAnimation('planet-animation-container');
+  console.log('[UI] Orb animation reinitialized');
+}
+
+/**
+ * Retour à l'écran de sélection de niveaux
+ */
+function handleBackToLevelSelect(): void {
+  console.log('[UI] Back to level select');
+  
+  // Arrêter le jeu
+  game.gameOver();
+  loop.stop();
+  
+  // Cacher le HUD et GameOverScreen
+  hud?.setButtonsVisible(false);
+  gameOverScreen?.hide();
+  
+  // Détruire le niveau actuel
+  if (currentLevel) {
+    currentLevel.destroy();
+    currentLevel = null;
+  }
+  
+  // Clear le paint
+  paintSystem?.clear();
+  
+  // Afficher l'écran de sélection
+  if (levelSelectScreen && playerProgression) {
+    levelSelectScreen.updateProgression(playerProgression);
+    levelSelectScreen.visible = true;
+  }
+}
+
+/**
+ * Relance le niveau actuel
+ */
+function handleRestartLevel(): void {
+  console.log('[UI] Restart level');
+  
+  game.restart();
+  pressureTank?.reset();
+  
+  if (currentLevel) {
+    gameTimer = currentLevel.getConfig().timeLimit;
+    gameStartTime = performance.now();
+    hud?.updateTimer(gameTimer);
+  }
+  
+  gameOverScreen?.hide();
+}
+
+/**
+ * Passe au niveau suivant
+ */
+async function handleNextLevel(): Promise<void> {
+  console.log('[UI] Next level');
+  
+  // Détruire le niveau actuel
+  if (currentLevel) {
+    currentLevel.destroy();
+  }
+  
+  // Charger le niveau suivant
+  const nextLevelId = selectedLevelId + 1;
+  await handleLevelSelected(nextLevelId);
+  
+  // Cacher l'écran de fin
+  gameOverScreen?.hide();
+}
+
+function handleGameStateChange(state: GameState): void {
+  console.log('[Main] Game state changed:', state);
+  
+  const startScreen = document.getElementById('start-screen');
+  const gameContainer = document.getElementById('game-container');
+  
+  switch (state) {
+    case 'START':
+      if (startScreen) startScreen.style.display = 'flex';
+      if (gameContainer) gameContainer.style.display = 'none';
+      // Arrêter le loop
+      loop.stop();
+      // Cacher les boutons
+      hud?.setButtonsVisible(false);
+      // Nettoyer le paint
+      paintSystem?.clear();
+      // Reset le PressureTank
+      pressureTank?.reset();
+      // Reset le timer
+      if (currentLevel) {
+        gameTimer = currentLevel.getConfig().timeLimit;
+        gameStartTime = 0;
+        hud?.updateTimer(gameTimer);
+      }
+      // Cacher l'écran de fin
+      gameOverScreen?.hide();
+      // Réinitialiser l'orbe
+      initOrbAnimation('planet-animation-container');
+      break;
+      
+    case 'PLAYING':
+      if (startScreen) startScreen.style.display = 'none';
+      if (gameContainer) gameContainer.style.display = 'block';
+      // Afficher les boutons
+      hud?.setButtonsVisible(true);
+      // Démarrer le loop si pas déjà en cours
+      if (!loop.running) {
+        loop.start();
+      }
+      break;
+      
+    case 'PAUSED':
+      loop.stop();
+      break;
+      
+    case 'GAME_OVER':
+      loop.stop();
+      hud?.setButtonsVisible(false);
+      // L'écran de fin est déjà affiché par endGame()
+      break;
+  }
 }
 
 // =============================================================================
-// STARTUP
+// INPUT HANDLING
 // =============================================================================
 
-// Wait for DOM to be ready
+function handleInput(event: InputEvent): void {
+  if (game.state !== 'PLAYING' || !paintSystem) return;
+  
+  switch (event.type) {
+    case 'hold-start':
+      paintSystem.startSpray(event.x, event.y);
+      break;
+      
+    case 'hold-move':
+      paintSystem.continueSpray(event.x, event.y);
+      break;
+      
+    case 'hold-end':
+      paintSystem.endSpray();
+      break;
+      
+    case 'double-tap':
+      paintSystem.triggerBomb(event.x, event.y);
+      break;
+      
+    case 'tap':
+      // Un tap simple pourrait déclencher un petit splat ou rien
+      // Pour l'instant, on fait un petit spray au point de tap
+      paintSystem.startSpray(event.x, event.y);
+      paintSystem.endSpray();
+      break;
+  }
+}
+
+// =============================================================================
+// GAME UPDATE
+// =============================================================================
+
+function updateGame(deltaTime: number): void {
+  if (game.state !== 'PLAYING') return;
+  
+  // Mettre à jour le PressureTank
+  pressureTank?.update(deltaTime);
+  
+  // Mettre à jour le système de peinture (particules, etc.)
+  paintSystem?.update(deltaTime);
+  
+  // Mettre à jour le timer
+  gameTimer -= deltaTime / 1000;
+  const timeUsed = (performance.now() - gameStartTime) / 1000;
+  
+  if (gameTimer <= 0) {
+    gameTimer = 0;
+    endGame(false, timeUsed);
+    return;
+  }
+  
+  hud?.updateTimer(gameTimer);
+  
+  // Vérifier les conditions de victoire (toutes les secondes)
+  if (Math.floor(timeUsed) !== Math.floor((timeUsed - deltaTime / 1000))) {
+    checkVictoryCondition(timeUsed);
+  }
+}
+
+/**
+ * Vérifie les conditions de victoire
+ */
+function checkVictoryCondition(timeUsed: number): void {
+  if (!scoringSystem || !pressureTank || !currentLevel) return;
+  
+  // Obtenir la couverture
+  const coverage = pixelCounter.forceRecalculate();
+  if (!coverage) return;
+  
+  // Vérifier si on a gagné
+  if (scoringSystem.checkVictory(coverage.coverageRatio)) {
+    endGame(true, timeUsed);
+  }
+}
+
+/**
+ * Termine la partie et affiche l'écran de fin
+ */
+function endGame(isVictory: boolean, timeUsed: number): void {
+  if (!scoringSystem || !pressureTank || !currentLevel || !gameOverScreen || !playerProgression) return;
+  
+  // Arrêter le jeu
+  game.gameOver();
+  loop.stop();
+  hud?.setButtonsVisible(false);
+  
+  // Calculer le score
+  const coverage = pixelCounter.forceRecalculate();
+  if (!coverage) return;
+  
+  const score = scoringSystem.calculateCurrentScore(
+    pressureTank,
+    timeUsed,
+    currentLevel.getConfig().timeLimit
+  );
+  
+  if (!score) return;
+  
+  // Calculer les métriques pour les étoiles
+  const metrics = scoringSystem.calculateMetrics(pressureTank);
+  if (!metrics) return;
+  
+  // Calculer les étoiles
+  const levelConfig = currentLevel.getConfig();
+  const starResult = calculateStars(
+    levelConfig,
+    metrics.coveragePercent,
+    metrics.overflowPercent,
+    metrics.pressurePercent
+  );
+  
+  // Sauvegarder la progression
+  if (isVictory) {
+    updateLevelProgress(
+      playerProgression,
+      selectedLevelId,
+      starResult.totalStars,
+      score.total,
+      timeUsed
+    );
+    console.log('[Progression] Level completed:', selectedLevelId, 'Stars:', starResult.totalStars);
+  }
+  
+  // Jouer le son de complétion si victoire
+  if (isVictory) {
+    audioSystem.play('completion');
+    haptics.vibrate('completion');
+  }
+  
+  // Afficher l'écran de fin
+  gameOverScreen.show(
+    isVictory,
+    score,
+    coverage.coverageRatio,
+    timeUsed,
+    pressureTank.pressure,
+    isVictory ? starResult : undefined
+  );
+}
+
+// =============================================================================
+// START
+// =============================================================================
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {

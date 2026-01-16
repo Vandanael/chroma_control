@@ -6,15 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
-    "generate-icons": "node scripts/generate-icons.js",
-    "deploy": "npm run build && gh-pages -d dist"
+    "preview": "vite preview"
   },
   "devDependencies": {
-    "gh-pages": "^6.3.0",
-    "sharp": "^0.34.5",
+    "@types/howler": "^2.2.12",
     "typescript": "^5.3.3",
     "vite": "^5.4.2",
-    "vite-plugin-pwa": "^0.20.0"
+    "vite-plugin-pwa": "^1.2.0"
+  },
+  "dependencies": {
+    "gsap": "^3.14.2",
+    "howler": "^2.2.4",
+    "pixi.js": "^8.15.0"
   }
 }

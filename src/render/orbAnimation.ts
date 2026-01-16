@@ -3,7 +3,26 @@
  * Orbe vivante avec 3 couches d'animation : respiration, onde, particules
  */
 
-import { getPlayerColorValue } from '../game/playerColor';
+// Couleurs disponibles
+const COLORS = {
+  CYAN: '#00F3FF',
+  GREEN: '#00FF88',
+  AMBER: '#FFAA00',
+} as const;
+
+type ColorType = keyof typeof COLORS;
+
+/**
+ * Récupère la couleur sélectionnée depuis le DOM
+ */
+function getSelectedColor(): string {
+  const selectedButton = document.querySelector('.color-button.selected');
+  if (selectedButton) {
+    const colorType = (selectedButton as HTMLElement).dataset.color as ColorType;
+    return COLORS[colorType] || COLORS.CYAN;
+  }
+  return COLORS.CYAN; // Par défaut
+}
 
 // =============================================================================
 // STATE
@@ -54,14 +73,16 @@ export function initOrbAnimation(containerId: string): void {
     return;
   }
 
-  // Vérifier si un canvas existe déjà (éviter la double initialisation)
+  // Vérifier si un canvas existe déjà dans ce container
   if (canvas && canvas.parentNode === container) {
-    console.log('[OrbAnimation] Animation already initialized, skipping');
+    // Réafficher le canvas s'il était caché
+    canvas.style.display = 'block';
+    console.log('[OrbAnimation] Animation already initialized, re-showing');
     return;
   }
 
-  // Nettoyer l'ancien canvas s'il existe ailleurs
-  if (canvas && canvas.parentNode) {
+  // Si le canvas existe ailleurs, le déplacer
+  if (canvas && canvas.parentNode && canvas.parentNode !== container) {
     canvas.parentNode.removeChild(canvas);
   }
 
@@ -84,14 +105,20 @@ export function initOrbAnimation(containerId: string): void {
   container.appendChild(canvas);
   
   // Initialiser la couleur
-  currentColor = getPlayerColorValue();
+  currentColor = getSelectedColor();
   
   // Initialiser le temps pour la première onde
   lastWaveTime = performance.now();
   lastFrameTime = performance.now();
   
-  // Démarrer l'animation
+  // Réinitialiser le zoom si nécessaire
+  isZooming = false;
+  zoomScale = 1.0;
+  
+  // Démarrer l'animation si elle n'est pas déjà en cours
+  if (!animationFrameId) {
   animate(performance.now());
+  }
   
   console.log('[OrbAnimation] Initialized');
 }
@@ -104,7 +131,7 @@ export function setOrbHoverColor(color: string | null): void {
     currentColor = color;
   } else {
     // Revenir à la couleur sélectionnée
-    currentColor = getPlayerColorValue();
+    currentColor = getSelectedColor();
   }
 }
 
@@ -121,7 +148,27 @@ export function triggerOrbZoom(): void {
 // =============================================================================
 
 function animate(timestamp: number): void {
-  if (!ctx || !canvas) return;
+  // Vérifier que le canvas est toujours dans le DOM
+  if (!canvas || !ctx) {
+    // Si le canvas a été retiré, réessayer de l'initialiser
+    const container = document.getElementById('planet-animation-container');
+    if (container && !canvas) {
+      console.log('[OrbAnimation] Canvas missing, reinitializing...');
+      initOrbAnimation('planet-animation-container');
+    }
+    // Continuer l'animation même si le canvas n'est pas prêt
+    animationFrameId = requestAnimationFrame(animate);
+    return;
+  }
+  
+  // Vérifier que le canvas est toujours dans le DOM
+  if (!canvas.parentNode) {
+    // Canvas retiré du DOM, réessayer de l'ajouter
+    const container = document.getElementById('planet-animation-container');
+    if (container) {
+      container.appendChild(canvas);
+    }
+  }
 
   const now = timestamp || performance.now();
   const deltaTime = lastFrameTime > 0 ? now - lastFrameTime : 16; // Delta en millisecondes
@@ -152,7 +199,7 @@ function animate(timestamp: number): void {
     if (particle.angle > Math.PI * 2) particle.angle -= Math.PI * 2;
   });
   
-  // Mettre à jour le zoom si actif
+  // Mettre à jour le zoom si actif (mais ne jamais arrêter l'animation)
   if (isZooming) {
     const zoomSpeed = 0.08 * (1 + zoomScale * 0.1);
     zoomScale += zoomSpeed;
@@ -160,15 +207,14 @@ function animate(timestamp: number): void {
     const fadeProgress = Math.min(1, (zoomScale - 1) / 1.5);
     const opacity = 1 - fadeProgress * 0.8;
     
+    // Ne pas arrêter l'animation même si le zoom dépasse 4.0
+    // Juste réinitialiser le zoom
     if (zoomScale > 4.0) {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-      }
-      return;
-    }
-    
+      isZooming = false;
+      zoomScale = 1.0;
+    } else {
     ctx.globalAlpha = opacity;
+    }
   }
 
   // Effacer le canvas
@@ -204,7 +250,7 @@ function animate(timestamp: number): void {
     ctx.globalAlpha = 1.0;
   }
   
-  // Continuer l'animation
+  // Continuer l'animation (TOUJOURS)
   animationFrameId = requestAnimationFrame(animate);
 }
 
@@ -344,16 +390,14 @@ function drawOrbitingParticles(
 }
 
 /**
- * Nettoie l'animation
+ * Nettoie l'animation (mais ne l'arrête pas complètement)
+ * L'animation continue de tourner en arrière-plan
  */
 export function cleanupOrbAnimation(): void {
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-  }
+  // Ne pas annuler l'animation, juste cacher le canvas
+  // L'animation continue de tourner pour qu'elle soit prête quand on revient
   if (canvas && canvas.parentNode) {
-    canvas.parentNode.removeChild(canvas);
+    canvas.style.display = 'none';
   }
-  canvas = null;
-  ctx = null;
+  // Ne pas mettre canvas/ctx à null pour garder l'animation active
 }
