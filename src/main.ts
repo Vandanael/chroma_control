@@ -3,6 +3,9 @@
  * Organic Paint - MVP
  */
 
+// Import design tokens CSS
+import './styles/design-tokens.css';
+
 import { initOrbAnimation, setOrbHoverColor, cleanupOrbAnimation } from './render/orbAnimation';
 import { game, GameState } from '@core/Game';
 import { inputManager, InputEvent } from '@core/InputManager';
