@@ -2,8 +2,10 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
-  base: '/chroma_control/',
+export default defineConfig(({ command }) => ({
+  // En dev: pas de base path pour faciliter le développement
+  // En build: base path pour GitHub Pages
+  base: command === 'build' ? '/chroma_control/' : '/',
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
@@ -68,4 +70,4 @@ export default defineConfig({
     minify: 'esbuild',
     sourcemap: false
   }
-});
+}));
