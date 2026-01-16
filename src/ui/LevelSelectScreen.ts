@@ -55,16 +55,19 @@ export class LevelSelectScreen extends Container {
     headerBg.eventMode = 'none'; // NE PAS bloquer les événements des enfants
     this.addChild(headerBg);
 
-    // Bouton Retour "RETOUR" - GROS ET VISIBLE
+    // Bouton Retour "RETOUR" - ZONE CLIQUABLE PARFAITEMENT ALIGNÉE
     const backButton = this.createBackButton();
-    backButton.position.set(40, 40); // Haut gauche avec marge
+    // ✅ Position du container : on soustrait hitMargin (60px) pour que le bouton visible soit à (40, 40)
+    backButton.position.set(40 - 60, 40 - 60); // Container à (-20, -20) pour bouton visible à (40, 40)
     backButton.zIndex = 1000; // TRÈS AU-DESSUS
     
     console.log('[LevelSelect] ═════════════════════════════════════');
     console.log('[LevelSelect] BackButton créé');
-    console.log('[LevelSelect] Position:', backButton.position.x, backButton.position.y);
-    console.log('[LevelSelect] Taille: 180×80px');
-    console.log('[LevelSelect] Zone cliquable: 220×120px (avec marges)');
+    console.log('[LevelSelect] Position container:', backButton.position.x, backButton.position.y);
+    console.log('[LevelSelect] Position bouton visible: (40, 40)');
+    console.log('[LevelSelect] Taille bouton: 180×80px');
+    console.log('[LevelSelect] Zone cliquable: 300×200px (marges 60px)');
+    console.log('[LevelSelect] Zone verte visible pour debug');
     console.log('[LevelSelect] EventMode:', backButton.eventMode);
     console.log('[LevelSelect] Interactive:', backButton.interactive);
     console.log('[LevelSelect] Callback onBack:', typeof this.onBack);
@@ -104,22 +107,36 @@ export class LevelSelectScreen extends Container {
   }
 
   /**
-   * Crée le bouton retour - ÉNORME ZONE CLIQUABLE
+   * Crée le bouton retour - ZONE CLIQUABLE PARFAITEMENT ALIGNÉE
    */
   private createBackButton(): Container {
     const container = new Container();
     const buttonWidth = 180;
     const buttonHeight = 80;
+    const hitMargin = 60; // ✅ Marge TRÈS généreuse (60px de chaque côté)
     
-    // Rectangle background (glass effect) - GROS BOUTON
+    // ✅ HitArea d'abord (zone cliquable totale)
+    const totalWidth = buttonWidth + (hitMargin * 2);
+    const totalHeight = buttonHeight + (hitMargin * 2);
+    container.hitArea = new Rectangle(0, 0, totalWidth, totalHeight);
+    
+    // ✅ DEBUG: Zone cliquable visible (vert semi-transparent) - TOUJOURS VISIBLE
+    const debugHitArea = new Graphics();
+    debugHitArea.rect(0, 0, totalWidth, totalHeight);
+    debugHitArea.fill({ color: 0x00ff00, alpha: 0.2 }); // Vert pour voir clairement
+    debugHitArea.stroke({ color: 0x00ff00, width: 3, alpha: 0.6 });
+    debugHitArea.eventMode = 'none';
+    container.addChild(debugHitArea);
+    
+    // ✅ Bouton visible CENTRÉ dans la hitArea
     const bg = new Graphics();
-    bg.roundRect(0, 0, buttonWidth, buttonHeight, 40);
+    bg.roundRect(hitMargin, hitMargin, buttonWidth, buttonHeight, 40);
     bg.fill({ color: 0xffffff, alpha: 0.05 });
     bg.stroke({ color: 0xffffff, width: 3, alpha: 0.2 });
-    bg.eventMode = 'none'; // NE PAS bloquer les événements
+    bg.eventMode = 'none';
     container.addChild(bg);
 
-    // Texte "RETOUR" - CLAIR ET VISIBLE
+    // Texte "RETOUR" - CENTRÉ dans le bouton visible
     const textStyle = new TextStyle({
       fontFamily: 'Nunito, system-ui, sans-serif',
       fontSize: 32,
@@ -128,42 +145,21 @@ export class LevelSelectScreen extends Container {
     });
     const text = new Text({ text: 'RETOUR', style: textStyle });
     text.anchor.set(0.5);
-    text.position.set(buttonWidth / 2, buttonHeight / 2);
-    text.eventMode = 'none'; // NE PAS bloquer les événements
+    text.position.set(hitMargin + buttonWidth / 2, hitMargin + buttonHeight / 2);
+    text.eventMode = 'none';
     container.addChild(text);
 
-    // CONFIGURATION ÉVÉNEMENTS - SUPER SIMPLE
+    // CONFIGURATION ÉVÉNEMENTS
     container.eventMode = 'static';
     container.cursor = 'pointer';
     container.interactive = true;
     container.interactiveChildren = false;
     
-    // HitArea RECTANGULAIRE ÉNORME avec marges généreuses
-    // Rectangle(x, y, width, height) en coordonnées locales
-    const hitMargin = 20;
-    container.hitArea = new Rectangle(
-      -hitMargin, 
-      -hitMargin, 
-      buttonWidth + (hitMargin * 2), 
-      buttonHeight + (hitMargin * 2)
-    );
-    
     console.log('[BackButton] HitArea:', {
-      x: -hitMargin,
-      y: -hitMargin,
-      width: buttonWidth + (hitMargin * 2),
-      height: buttonHeight + (hitMargin * 2)
+      width: totalWidth,
+      height: totalHeight,
+      buttonVisible: { x: hitMargin, y: hitMargin, w: buttonWidth, h: buttonHeight }
     });
-
-    // DEBUG: Zone cliquable visible (rouge semi-transparent)
-    // Décommenter pour voir la hitArea
-    /*
-    const debugHitArea = new Graphics();
-    debugHitArea.rect(-hitMargin, -hitMargin, buttonWidth + (hitMargin * 2), buttonHeight + (hitMargin * 2));
-    debugHitArea.fill({ color: 0xff0000, alpha: 0.2 });
-    debugHitArea.eventMode = 'none';
-    container.addChild(debugHitArea);
-    */
 
     // ÉVÉNEMENTS avec logs détaillés
     container.on('pointerdown', (event) => {
